@@ -1,0 +1,187 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  font-family: "Arial", sans-serif;
+}
+
+body {
+  background-color: #1a1a2e;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
+  color: #fff;
+}
+
+.game-container {
+  width: 100%;
+  max-width: 800px;
+  background-color: #16213e;
+  border-radius: 10px;
+  box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+  overflow: hidden;
+}
+
+.header {
+  background-color: #0f3460;
+  padding: 15px;
+  text-align: center;
+}
+
+.header h1 {
+  margin-bottom: 10px;
+  color: #e94560;
+  text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+}
+
+.stats {
+  display: flex;
+  justify-content: space-around;
+  margin: 10px 0;
+}
+
+.stat {
+  font-size: 18px;
+  font-weight: bold;
+}
+
+.game-area {
+  position: relative;
+  width: 100%;
+  height: 500px;
+  background-color: #1a1a2e;
+  overflow: hidden;
+}
+
+canvas {
+  display: block;
+}
+
+.controls {
+  display: flex;
+  flex-direction: column;
+  padding: 15px;
+  background-color: #0f3460;
+}
+
+.towers {
+  display: flex;
+  justify-content: space-around;
+  margin-bottom: 15px;
+}
+
+.tower-option {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  cursor: pointer;
+  padding: 10px;
+  border-radius: 5px;
+  transition: background-color 0.3s;
+}
+
+.tower-option:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+.tower-option.selected {
+  background-color: rgba(233, 69, 96, 0.3);
+}
+
+.tower {
+  width: 40px;
+  height: 40px;
+  border-radius: 5px;
+  margin-bottom: 5px;
+}
+
+.basic-tower {
+  background-color: #4caf50;
+  border: 2px solid #2e7d32;
+}
+
+.sniper-tower {
+  background-color: #2196f3;
+  border: 2px solid #0d47a1;
+}
+
+.aoe-tower {
+  background-color: #ff9800;
+  border: 2px solid #e65100;
+}
+
+.tower-info {
+  font-size: 12px;
+  text-align: center;
+}
+
+.buttons {
+  display: flex;
+  justify-content: space-around;
+}
+
+button {
+  background-color: #e94560;
+  color: white;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 16px;
+  transition: background-color 0.3s;
+}
+
+button:hover {
+  background-color: #b23450;
+}
+
+button:disabled {
+  background-color: #666;
+  cursor: not-allowed;
+}
+
+#gameMessage {
+  padding: 10px;
+  text-align: center;
+  font-size: 16px;
+  color: #e94560;
+  min-height: 40px;
+}
+
+/* Game elements */
+.enemy {
+  position: absolute;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+}
+
+.projectile {
+  position: absolute;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+}
+
+@media (max-width: 600px) {
+  .game-area {
+    height: 300px;
+  }
+
+  .stats {
+    flex-wrap: wrap;
+  }
+
+  .stat {
+    width: 50%;
+    margin-bottom: 5px;
+  }
+
+  .towers {
+    flex-wrap: wrap;
+  }
+
+  .tower-option {
+    width: 30%;
+    margin-bottom: 10px;
+  }
+}

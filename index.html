@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Tower Defense Game</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <div class="game-container">
+      <div class="header">
+        <h1>Tower Defense</h1>
+        <div class="stats">
+          <div class="stat">Lives: <span id="lives">10</span></div>
+          <div class="stat">Gold: <span id="gold">100</span></div>
+          <div class="stat">Wave: <span id="wave">0</span></div>
+          <div class="stat">Score: <span id="score">0</span></div>
+        </div>
+      </div>
+      <div class="game-area">
+        <canvas id="gameCanvas" width="800" height="500"></canvas>
+      </div>
+      <div class="controls">
+        <div class="towers">
+          <div class="tower-option" id="basicTower" data-cost="50">
+            <div class="tower basic-tower"></div>
+            <div class="tower-info">Basic Tower<br />Cost: 50</div>
+          </div>
+          <div class="tower-option" id="sniperTower" data-cost="100">
+            <div class="tower sniper-tower"></div>
+            <div class="tower-info">Sniper Tower<br />Cost: 100</div>
+          </div>
+          <div class="tower-option" id="aoeTower" data-cost="150">
+            <div class="tower aoe-tower"></div>
+            <div class="tower-info">AoE Tower<br />Cost: 150</div>
+          </div>
+        </div>
+        <div class="buttons">
+          <button id="startWave">Start Wave</button>
+          <button id="speedToggle">Speed: x1</button>
+        </div>
+      </div>
+      <div id="gameMessage"></div>
+    </div>
+    <script src="game.js"></script>
+  </body>
+</html>
