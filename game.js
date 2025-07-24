@@ -131,6 +131,9 @@ let backgroundCacheHeight = 0;
 let baseHitAnim = { active: false, timer: 0 };
 let screenFlash = { active: false, timer: 0 };
 
+// Add high score to game state
+let highScore = parseInt(localStorage.getItem("td_highscore") || "0", 10);
+
 // 2. Redesign the path with a winding shape
 function createPath() {
   // New winding path (array of grid cell centers)
@@ -979,10 +982,17 @@ function completeWave() {
 function gameOver(isWin) {
   gameState.gameOver = true;
   let message;
-  if (isWin) {
-    message = `Victory! You've completed all waves! Final score: ${gameState.score}`;
+  if (gameState.score > highScore) {
+    highScore = gameState.score;
+    localStorage.setItem("td_highscore", highScore);
+    message = `New High Score! ${highScore}\n`;
   } else {
-    message = `Game Over! You've been defeated at wave ${gameState.wave}. Final score: ${gameState.score}`;
+    message = "";
+  }
+  if (isWin) {
+    message += `Victory! You've completed all waves! Final score: ${gameState.score}`;
+  } else {
+    message += `Game Over! You've been defeated at wave ${gameState.wave}. Final score: ${gameState.score}`;
   }
   if (window.showGameOverModal) {
     window.showGameOverModal(message);
@@ -1377,6 +1387,11 @@ function updateUI() {
   goldElement.textContent = gameState.gold;
   waveElement.textContent = gameState.wave;
   scoreElement.textContent = gameState.score;
+  // Show high score if element exists
+  const highScoreElement = document.getElementById("highscore");
+  if (highScoreElement) {
+    highScoreElement.textContent = highScore;
+  }
 }
 
 // Display message
