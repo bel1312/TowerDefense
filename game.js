@@ -39,7 +39,7 @@ const towerTypes = {
   basicTower: {
     cost: 50,
     range: 100,
-    damage: 10,
+    damage: 12, // 10 * 1.2
     fireRate: 1, // shots per second
     projectileSpeed: 5,
     color: "#4CAF50",
@@ -50,7 +50,7 @@ const towerTypes = {
   sniperTower: {
     cost: 100,
     range: 200,
-    damage: 30,
+    damage: 36, // 30 * 1.2
     fireRate: 0.5, // shots per second
     projectileSpeed: 10,
     color: "#2196F3",
@@ -61,7 +61,7 @@ const towerTypes = {
   aoeTower: {
     cost: 150,
     range: 80,
-    damage: 15,
+    damage: 18, // 15 * 1.2
     fireRate: 0.8, // shots per second
     projectileSpeed: 3,
     color: "#FF9800",
@@ -70,83 +70,298 @@ const towerTypes = {
     aoeRadius: 30,
     lastShot: 0,
   },
+  slowTower: {
+    cost: 120,
+    range: 120,
+    damage: 0,
+    fireRate: 0.7, // shots per second
+    projectileSpeed: 6,
+    color: "#00bcd4",
+    projectileColor: "#0097a7",
+    aoe: false,
+    slowAmount: 0.5, // 50% slow
+    slowDuration: 2000, // ms
+    lastShot: 0,
+  },
 };
 
 // Enemy types
 const enemyTypes = {
   basic: {
     health: 30,
-    speed: 1,
+    speed: 20,
     size: 15,
     color: "#e74c3c",
     reward: 5,
   },
   fast: {
     health: 15,
-    speed: 2,
+    speed: 25,
     size: 10,
     color: "#f1c40f",
     reward: 8,
   },
   tank: {
     health: 80,
-    speed: 0.5,
-    size: 20,
+    speed: 10,
+    size: 15,
     color: "#8e44ad",
     reward: 15,
   },
   boss: {
     health: 200,
-    speed: 0.7,
+    speed: 10, // Increased from 0.7
     size: 25,
     color: "#c0392b",
     reward: 50,
   },
 };
 
-// Create the game path
+// 1. Define grid parameters
+const GRID_SIZE = 40;
+const GRID_COLS = 20;
+const GRID_ROWS = 12;
+
+// Add at the top:
+let backgroundCache = null;
+let backgroundCacheWidth = 0;
+let backgroundCacheHeight = 0;
+
+// Add to game state for base hit animation and screen flash
+let baseHitAnim = { active: false, timer: 0 };
+let screenFlash = { active: false, timer: 0 };
+
+// 2. Redesign the path with a winding shape
 function createPath() {
-  // Define path waypoints (x, y)
+  // New winding path (array of grid cell centers)
   gameState.path = [
-    { x: 0, y: 100 },
-    { x: 150, y: 100 },
-    { x: 150, y: 250 },
-    { x: 300, y: 250 },
-    { x: 300, y: 100 },
-    { x: 450, y: 100 },
-    { x: 450, y: 350 },
-    { x: 600, y: 350 },
-    { x: 600, y: 200 },
-    { x: 800, y: 200 },
+    { x: 0, y: 5 },
+    { x: 4, y: 5 },
+    { x: 4, y: 2 },
+    { x: 8, y: 2 },
+    { x: 8, y: 8 },
+    { x: 12, y: 8 },
+    { x: 12, y: 4 },
+    { x: 16, y: 4 },
+    { x: 16, y: 10 },
+    { x: 19, y: 10 },
   ];
 }
 
-// Draw the game path
+// 3. Helper: Convert grid cell to pixel center
+function gridToPixel(cell) {
+  return {
+    x: cell.x * GRID_SIZE + GRID_SIZE / 2,
+    y: cell.y * GRID_SIZE + GRID_SIZE / 2,
+  };
+}
+
+// Update drawBackground to use a darker gray
+function drawBackground() {
+  if (
+    !backgroundCache ||
+    backgroundCacheWidth !== canvas.width ||
+    backgroundCacheHeight !== canvas.height
+  ) {
+    backgroundCacheWidth = canvas.width;
+    backgroundCacheHeight = canvas.height;
+    backgroundCache = document.createElement("canvas");
+    backgroundCache.width = canvas.width;
+    backgroundCache.height = canvas.height;
+    const bctx = backgroundCache.getContext("2d");
+    // Darker gray gradient
+    const grayPattern = bctx.createLinearGradient(
+      0,
+      0,
+      0,
+      backgroundCache.height
+    );
+    grayPattern.addColorStop(0, "#888");
+    grayPattern.addColorStop(1, "#444");
+    bctx.fillStyle = grayPattern;
+    bctx.fillRect(0, 0, backgroundCache.width, backgroundCache.height);
+    // Stones (randomized for beauty)
+    for (let i = 0; i < 40; i++) {
+      bctx.save();
+      bctx.globalAlpha = 0.15;
+      bctx.fillStyle = "#bbb";
+      const x = Math.random() * backgroundCache.width;
+      const y = Math.random() * backgroundCache.height;
+      bctx.beginPath();
+      bctx.ellipse(
+        x,
+        y,
+        8 + Math.random() * 8,
+        5 + Math.random() * 5,
+        Math.random() * Math.PI,
+        0,
+        Math.PI * 2
+      );
+      bctx.fill();
+      bctx.restore();
+    }
+  }
+  ctx.drawImage(backgroundCache, 0, 0);
+}
+
+// 5. Draw the path with a gradient and border
 function drawPath() {
+  if (gameState.path.length < 2) return;
+  // Build the path as a single shape
+  ctx.save();
+  ctx.lineJoin = "round";
+  ctx.lineCap = "round";
+  // Path fill (light color)
   ctx.beginPath();
-  ctx.moveTo(gameState.path[0].x, gameState.path[0].y);
-
+  const start = gridToPixel(gameState.path[0]);
+  ctx.moveTo(start.x, start.y);
   for (let i = 1; i < gameState.path.length; i++) {
-    ctx.lineTo(gameState.path[i].x, gameState.path[i].y);
+    const p = gridToPixel(gameState.path[i]);
+    ctx.lineTo(p.x, p.y);
   }
-
+  ctx.strokeStyle = "#f5e6c8";
+  ctx.lineWidth = GRID_SIZE * 0.8;
+  ctx.stroke();
+  // Path border (red)
+  ctx.beginPath();
+  ctx.moveTo(start.x, start.y);
+  for (let i = 1; i < gameState.path.length; i++) {
+    const p = gridToPixel(gameState.path[i]);
+    ctx.lineTo(p.x, p.y);
+  }
   ctx.strokeStyle = "#e94560";
-  ctx.lineWidth = 30;
+  ctx.lineWidth = GRID_SIZE * 0.5;
   ctx.stroke();
+  ctx.restore();
+}
 
-  // Draw path border
+// Draw a castle gate at the end of the path
+function drawBase() {
+  const end = gridToPixel(gameState.path[gameState.path.length - 1]);
+  ctx.save();
+  ctx.translate(end.x, end.y);
+  // Draw castle wall
+  ctx.fillStyle = "#b0b0b0";
+  ctx.strokeStyle = "#888";
+  ctx.lineWidth = 4;
   ctx.beginPath();
-  ctx.moveTo(gameState.path[0].x, gameState.path[0].y);
-
-  for (let i = 1; i < gameState.path.length; i++) {
-    ctx.lineTo(gameState.path[i].x, gameState.path[i].y);
-  }
-
-  ctx.strokeStyle = "#ffffff";
-  ctx.lineWidth = 32;
-  ctx.globalAlpha = 0.2;
+  ctx.moveTo(-GRID_SIZE * 0.7, GRID_SIZE * 0.7);
+  ctx.lineTo(-GRID_SIZE * 0.7, -GRID_SIZE * 0.7);
+  ctx.lineTo(GRID_SIZE * 0.7, -GRID_SIZE * 0.7);
+  ctx.lineTo(GRID_SIZE * 0.7, GRID_SIZE * 0.7);
+  ctx.closePath();
+  ctx.fill();
   ctx.stroke();
+  // Draw battlements
+  ctx.fillStyle = "#888";
+  for (let i = -2; i <= 2; i++) {
+    ctx.fillRect(
+      i * GRID_SIZE * 0.28 - GRID_SIZE * 0.09,
+      -GRID_SIZE * 0.7 - GRID_SIZE * 0.13,
+      GRID_SIZE * 0.18,
+      GRID_SIZE * 0.13
+    );
+  }
+  // Draw gate arch
+  ctx.beginPath();
+  ctx.arc(0, GRID_SIZE * 0.7, GRID_SIZE * 0.35, Math.PI, 0, false);
+  ctx.lineTo(GRID_SIZE * 0.35, GRID_SIZE * 0.7);
+  ctx.lineTo(-GRID_SIZE * 0.35, GRID_SIZE * 0.7);
+  ctx.closePath();
+  ctx.fillStyle = baseHitAnim.active ? "#e94560" : "#5d4037";
+  ctx.globalAlpha = baseHitAnim.active ? 0.8 : 1;
+  ctx.fill();
   ctx.globalAlpha = 1;
+  // Gate lines
+  ctx.strokeStyle = "#3e2723";
+  ctx.lineWidth = 2;
+  for (let i = -1; i <= 1; i++) {
+    ctx.beginPath();
+    ctx.moveTo(i * GRID_SIZE * 0.18, GRID_SIZE * 0.7);
+    ctx.lineTo(i * GRID_SIZE * 0.18, GRID_SIZE * 0.7 - GRID_SIZE * 0.35);
+    ctx.stroke();
+  }
+  // Flashing thick red border
+  if (baseHitAnim.active) {
+    ctx.save();
+    ctx.lineWidth = 10;
+    ctx.strokeStyle = `rgba(233,69,96,${
+      0.7 + 0.3 * Math.sin(Date.now() / 80)
+    })`;
+    ctx.beginPath();
+    ctx.arc(0, GRID_SIZE * 0.35, GRID_SIZE * 0.48, Math.PI, 0, false);
+    ctx.stroke();
+    ctx.restore();
+  }
+  ctx.restore();
+}
+
+// Draw a red screen flash overlay
+function drawScreenFlash() {
+  if (screenFlash.active) {
+    ctx.save();
+    ctx.globalAlpha = Math.min(0.55, screenFlash.timer * 2.5);
+    ctx.fillStyle = "#e94560";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.globalAlpha = 1;
+    ctx.restore();
+  }
+}
+
+// 6. Draw the grid and highlight valid slots
+function drawGridOverlay() {
+  for (let y = 0; y < GRID_ROWS; y++) {
+    for (let x = 0; x < GRID_COLS; x++) {
+      // Check if cell is on or near the path (expanded radius)
+      let onPath = false;
+      for (let i = 0; i < gameState.path.length - 1; i++) {
+        const a = gameState.path[i];
+        const b = gameState.path[i + 1];
+        const px = x + 0.5,
+          py = y + 0.5;
+        const ax = a.x,
+          ay = a.y,
+          bx = b.x,
+          by = b.y;
+        const t =
+          ((px - ax) * (bx - ax) + (py - ay) * (by - ay)) /
+          ((bx - ax) ** 2 + (by - ay) ** 2);
+        const closestX = ax + t * (bx - ax);
+        const closestY = ay + t * (by - ay);
+        const dist = Math.sqrt((px - closestX) ** 2 + (py - closestY) ** 2);
+        if (dist < 0.7) onPath = true; // slightly larger radius
+      }
+      if (onPath) continue;
+      // Check if cell is occupied
+      let occupied = false;
+      for (const tower of gameState.towers) {
+        const cell = pixelToGrid({ x: tower.x, y: tower.y });
+        if (cell.x === x && cell.y === y) occupied = true;
+      }
+      ctx.save();
+      ctx.lineWidth = 1;
+      if (occupied) {
+        ctx.strokeStyle = "rgba(255,255,255,0.2)";
+        ctx.fillStyle = "rgba(255,255,255,0.08)";
+      } else {
+        ctx.strokeStyle = "rgba(255,255,255,0.25)";
+        ctx.fillStyle = "rgba(255,255,255,0.04)";
+      }
+      ctx.beginPath();
+      ctx.rect(x * GRID_SIZE, y * GRID_SIZE, GRID_SIZE, GRID_SIZE);
+      ctx.fill();
+      ctx.stroke();
+      ctx.restore();
+    }
+  }
+}
+
+// 7. Helper: Convert pixel to grid cell
+function pixelToGrid(pos) {
+  return {
+    x: Math.floor(pos.x / GRID_SIZE),
+    y: Math.floor(pos.y / GRID_SIZE),
+  };
 }
 
 // Initialize the game
@@ -210,6 +425,9 @@ function initGame() {
     if (gameState.gameSpeed === 1) {
       gameState.gameSpeed = 2;
       speedToggleButton.textContent = "Speed: x2";
+    } else if (gameState.gameSpeed === 2) {
+      gameState.gameSpeed = 4;
+      speedToggleButton.textContent = "Speed: x4";
     } else {
       gameState.gameSpeed = 1;
       speedToggleButton.textContent = "Speed: x1";
@@ -220,38 +438,60 @@ function initGame() {
   requestAnimationFrame(gameLoop);
 }
 
-// Place tower at position
+// 8. Restrict tower placement to valid grid cells
 function placeTower(x, y) {
-  // Check if position is valid (not on path)
-  if (isOnPath(x, y, 20)) {
+  const cell = pixelToGrid({ x, y });
+  // Check if cell is on the path (tighter radius)
+  let onPath = false;
+  for (let i = 0; i < gameState.path.length - 1; i++) {
+    const a = gameState.path[i];
+    const b = gameState.path[i + 1];
+    const px = cell.x + 0.5,
+      py = cell.y + 0.5;
+    const ax = a.x,
+      ay = a.y,
+      bx = b.x,
+      by = b.y;
+    const t =
+      ((px - ax) * (bx - ax) + (py - ay) * (by - ay)) /
+      ((bx - ax) ** 2 + (by - ay) ** 2);
+    const closestX = ax + t * (bx - ax);
+    const closestY = ay + t * (by - ay);
+    const dist = Math.sqrt((px - closestX) ** 2 + (py - closestY) ** 2);
+    if (dist < 0.45) onPath = true;
+  }
+  // Check if cell is occupied
+  let occupied = false;
+  for (const tower of gameState.towers) {
+    const tcell = pixelToGrid({ x: tower.x, y: tower.y });
+    if (tcell.x === cell.x && tcell.y === cell.y) occupied = true;
+  }
+  if (onPath) {
     displayMessage("Can't place tower on the path!");
     return;
   }
-
-  // Check if tower overlaps with existing tower
-  if (isTowerOverlap(x, y)) {
+  if (occupied) {
     displayMessage("Can't place tower on another tower!");
     return;
   }
-
   const towerType = gameState.selectedTowerType;
   const towerConfig = getTowerConfig(towerType);
   const towerCost = towerConfig.cost;
-
   if (gameState.gold >= towerCost) {
-    // Create new tower
+    const center = gridToPixel(cell);
     const tower = {
-      x,
-      y,
+      x: center.x,
+      y: center.y,
       type: towerType,
       ...towerConfig,
       lastShot: 0,
     };
-
     gameState.towers.push(tower);
     gameState.gold -= towerCost;
     updateUI();
     displayMessage(`${towerType} placed!`);
+    gameState.selectedTowerType = null;
+    towerOptions.forEach((opt) => opt.classList.remove("selected"));
   } else {
     displayMessage(`Not enough gold! You need ${towerCost} gold.`);
   }
@@ -316,6 +556,8 @@ function getTowerConfig(towerType) {
       return towerTypes.sniperTower;
     case "aoeTower":
       return towerTypes.aoeTower;
+    case "slowTower":
+      return towerTypes.slowTower;
     default:
       return towerTypes.basicTower;
   }
@@ -338,22 +580,23 @@ function startWave() {
 // Spawn an enemy
 function spawnEnemy() {
   let enemyType;
-
-  // Determine enemy type based on wave and random chance
-  const rand = Math.random();
-
-  if (gameState.wave >= 10 && rand < 0.1) {
+  // On every 5th wave, add a boss as the first enemy, then spawn others as normal
+  if (gameState.wave % 5 === 0 && gameState.enemiesSpawned === 0) {
     enemyType = "boss";
-  } else if (gameState.wave >= 5 && rand < 0.3) {
-    enemyType = "tank";
-  } else if (rand < 0.4) {
-    enemyType = "fast";
   } else {
-    enemyType = "basic";
+    // Determine enemy type based on wave and random chance
+    const rand = Math.random();
+    if (gameState.wave >= 5 && rand < 0.3) {
+      enemyType = "tank";
+    } else if (rand < 0.4) {
+      enemyType = "fast";
+    } else {
+      enemyType = "basic";
+    }
   }
 
   // Scale health based on wave
-  const healthMultiplier = 1 + (gameState.wave - 1) * 0.2;
+  const healthMultiplier = 1 + (gameState.wave - 1) * 0.1;
 
   const enemy = {
     x: gameState.path[0].x,
@@ -363,6 +606,8 @@ function spawnEnemy() {
     maxHealth: enemyTypes[enemyType].health * healthMultiplier,
     pathIndex: 0,
     progress: 0,
+    slowUntil: 0, // New property for slow effect
+    slowAmount: 0, // New property for slow effect
   };
 
   gameState.enemies.push(enemy);
@@ -402,8 +647,9 @@ function update(deltaTime) {
       gameState.lives--;
       updateUI();
 
-      if (gameState.lives <= 0) {
+      if (gameState.lives <= 0 && !gameState.gameOver) {
         gameOver(false);
+        return; // Stop further update processing
       }
     }
   }
@@ -451,7 +697,14 @@ function update(deltaTime) {
         if (distance < enemy.size) {
           // Apply damage
           enemy.currentHealth -= projectile.damage;
-
+          // Apply slow if slowTower
+          if (
+            projectile.towerType === "slowTower" &&
+            projectile.slowAmount > 0
+          ) {
+            enemy.slowUntil = Date.now() + projectile.slowDuration;
+            enemy.slowAmount = projectile.slowAmount;
+          }
           // Check if enemy is defeated
           if (enemy.currentHealth <= 0) {
             defeatEnemy(enemy, j);
@@ -482,35 +735,51 @@ function update(deltaTime) {
   ) {
     completeWave();
   }
+
+  // Animate base hit
+  if (baseHitAnim.active) {
+    baseHitAnim.timer -= deltaTime / 1000;
+    if (baseHitAnim.timer <= 0) {
+      baseHitAnim.active = false;
+      baseHitAnim.timer = 0;
+    }
+  }
+  // Animate screen flash
+  if (screenFlash.active) {
+    screenFlash.timer -= deltaTime / 1000;
+    if (screenFlash.timer <= 0) {
+      screenFlash.active = false;
+      screenFlash.timer = 0;
+    }
+  }
 }
 
-// Move enemy along the path
+// Fix moveEnemy to use gridToPixel for waypoints
 function moveEnemy(enemy, deltaTime) {
-  const speedFactor = enemy.speed * (deltaTime / 1000) * gameState.gameSpeed;
-
-  // Current path segment
-  const currentPoint = gameState.path[enemy.pathIndex];
-  const nextPoint = gameState.path[enemy.pathIndex + 1];
-
+  let speed = enemy.speed;
+  if (enemy.slowUntil && Date.now() < enemy.slowUntil) {
+    speed = enemy.speed * (1 - (enemy.slowAmount || 0));
+  } else {
+    enemy.slowUntil = 0;
+    enemy.slowAmount = 0;
+  }
+  const speedFactor = speed * (deltaTime / 1000) * gameState.gameSpeed;
+  // Use gridToPixel for path
+  const currentPoint = gridToPixel(gameState.path[enemy.pathIndex]);
+  const nextPoint = gridToPixel(gameState.path[enemy.pathIndex + 1]);
   // Calculate direction and distance
   const dx = nextPoint.x - currentPoint.x;
   const dy = nextPoint.y - currentPoint.y;
   const distance = Math.sqrt(dx * dx + dy * dy);
-
   // Update progress along current path segment
   enemy.progress += speedFactor;
-
   // If reached end of segment, move to next segment
   if (enemy.progress >= distance) {
     enemy.progress -= distance;
     enemy.pathIndex++;
-
-    // If there are more segments
     if (enemy.pathIndex < gameState.path.length - 1) {
-      // Continue to next segment
       moveEnemy(enemy, 0);
     } else {
-      // Position at end of path
       enemy.x = nextPoint.x;
       enemy.y = nextPoint.y;
     }
@@ -561,8 +830,11 @@ function shoot(tower, target) {
     size: tower.aoe ? 6 : 4,
     aoe: tower.aoe,
     aoeRadius: tower.aoeRadius || 0,
+    slowAmount: tower.slowAmount || 0,
+    slowDuration: tower.slowDuration || 0,
+    towerType: tower.type,
+    targetEnemy: target,
   };
-
   gameState.projectiles.push(projectile);
 }
 
@@ -571,33 +843,22 @@ function moveProjectile(projectile, deltaTime) {
   const dx = projectile.targetX - projectile.x;
   const dy = projectile.targetY - projectile.y;
   const distance = Math.sqrt(dx * dx + dy * dy);
-
-  // Normalize direction
   const vx = dx / distance;
   const vy = dy / distance;
-
-  // Move projectile
   const speedFactor = projectile.speed * (deltaTime / 1000) * 60;
   projectile.x += vx * speedFactor;
   projectile.y += vy * speedFactor;
 }
 
-// Apply AOE damage
+// 1. Fix AoE damage: all enemies in radius take full damage (no falloff)
 function applyAoeDamage(projectile) {
   for (let i = gameState.enemies.length - 1; i >= 0; i--) {
     const enemy = gameState.enemies[i];
     const dx = enemy.x - projectile.targetX;
     const dy = enemy.y - projectile.targetY;
     const distance = Math.sqrt(dx * dx + dy * dy);
-
     if (distance <= projectile.aoeRadius) {
-      // Apply damage with falloff based on distance
-      const falloff = 1 - distance / projectile.aoeRadius;
-      const damage = projectile.damage * falloff;
-
-      enemy.currentHealth -= damage;
-
-      // Check if enemy is defeated
+      enemy.currentHealth -= projectile.damage; // No falloff
       if (enemy.currentHealth <= 0) {
         defeatEnemy(enemy, i);
       }
@@ -628,15 +889,16 @@ function completeWave() {
 // Game over
 function gameOver(isWin) {
   gameState.gameOver = true;
-
+  let message;
   if (isWin) {
-    displayMessage(
-      `Victory! You've completed all waves! Final score: ${gameState.score}`
-    );
+    message = `Victory! You've completed all waves! Final score: ${gameState.score}`;
   } else {
-    displayMessage(
-      `Game Over! You've been defeated at wave ${gameState.wave}. Final score: ${gameState.score}`
-    );
+    message = `Game Over! You've been defeated at wave ${gameState.wave}. Final score: ${gameState.score}`;
+  }
+  if (window.showGameOverModal) {
+    window.showGameOverModal(message);
+  } else {
+    displayMessage(message);
   }
 }
 
@@ -664,128 +926,346 @@ function resetGame() {
   );
 }
 
-// Draw game elements
+// 9. Update draw() to use new background, path, and grid
 function draw() {
-  // Clear canvas
   ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-  // Draw background grid
-  drawGrid();
-
-  // Draw path
+  drawBackground();
   drawPath();
-
-  // Draw towers
+  drawBase();
+  // No drawGridOverlay();
   for (const tower of gameState.towers) {
-    drawTower(tower);
+    const target = findTarget(tower);
+    let angle = 0;
+    if (target) {
+      angle = Math.atan2(target.y - tower.y, target.x - tower.x);
+    }
+    drawTower(tower, angle);
   }
-
-  // Draw tower range for selected tower
   if (gameState.selectedTowerType) {
     drawTowerPlacement();
   }
-
-  // Draw enemies
   for (const enemy of gameState.enemies) {
     drawEnemy(enemy);
   }
-
-  // Draw projectiles
   for (const projectile of gameState.projectiles) {
     drawProjectile(projectile);
   }
-}
-
-// Draw background grid
-function drawGrid() {
-  ctx.strokeStyle = "rgba(255, 255, 255, 0.1)";
-  ctx.lineWidth = 1;
-
-  // Draw vertical lines
-  for (let x = 0; x <= canvas.width; x += 40) {
-    ctx.beginPath();
-    ctx.moveTo(x, 0);
-    ctx.lineTo(x, canvas.height);
-    ctx.stroke();
-  }
-
-  // Draw horizontal lines
-  for (let y = 0; y <= canvas.height; y += 40) {
-    ctx.beginPath();
-    ctx.moveTo(0, y);
-    ctx.lineTo(canvas.width, y);
-    ctx.stroke();
-  }
+  drawScreenFlash();
 }
 
 // Draw tower
-function drawTower(tower) {
-  // Draw tower base
-  ctx.fillStyle = tower.color;
-  ctx.beginPath();
-  ctx.arc(tower.x, tower.y, 15, 0, Math.PI * 2);
-  ctx.fill();
-
-  // Draw tower top
-  ctx.fillStyle = "#ffffff";
-  ctx.beginPath();
-  ctx.arc(tower.x, tower.y, 8, 0, Math.PI * 2);
-  ctx.fill();
-
-  // Draw tower range (if debugging)
-  // ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
-  // ctx.beginPath();
-  // ctx.arc(tower.x, tower.y, tower.range, 0, Math.PI * 2);
-  // ctx.stroke();
+function drawTower(tower, facingAngle = 0, context = ctx) {
+  context.save();
+  context.translate(tower.x, tower.y);
+  context.rotate(facingAngle);
+  switch (tower.type) {
+    case "basicTower":
+      context.fillStyle = tower.color;
+      context.beginPath();
+      context.arc(0, 0, 15, 0, Math.PI * 2);
+      context.fill();
+      context.lineWidth = 2;
+      context.strokeStyle = "#222";
+      context.stroke();
+      context.fillStyle = "#fff";
+      context.beginPath();
+      context.arc(0, 0, 7, 0, Math.PI * 2);
+      context.fill();
+      // Add a barrel
+      context.save();
+      context.rotate(0);
+      context.fillStyle = "#222";
+      context.fillRect(0, -3, 15, 6);
+      context.restore();
+      break;
+    case "sniperTower":
+      context.fillStyle = tower.color;
+      context.beginPath();
+      context.arc(0, 0, 13, 0, Math.PI * 2);
+      context.fill();
+      context.lineWidth = 2;
+      context.strokeStyle = "#0D47A1";
+      context.stroke();
+      // Barrel
+      context.save();
+      context.rotate(0);
+      context.fillStyle = "#0D47A1";
+      context.fillRect(0, -3, 22, 6);
+      context.restore();
+      context.fillStyle = "#fff";
+      context.beginPath();
+      context.arc(0, 0, 6, 0, Math.PI * 2);
+      context.fill();
+      break;
+    case "aoeTower":
+      context.fillStyle = tower.color;
+      context.beginPath();
+      context.arc(0, 0, 15, 0, Math.PI * 2);
+      context.fill();
+      context.lineWidth = 2;
+      context.strokeStyle = "#E65100";
+      context.stroke();
+      // Radiating lines
+      context.strokeStyle = "#fff";
+      for (let i = 0; i < 8; i++) {
+        context.save();
+        context.rotate((Math.PI / 4) * i);
+        context.beginPath();
+        context.moveTo(0, 0);
+        context.lineTo(0, -15);
+        context.stroke();
+        context.restore();
+      }
+      context.fillStyle = "#fff";
+      context.beginPath();
+      context.arc(0, 0, 6, 0, Math.PI * 2);
+      context.fill();
+      break;
+    case "slowTower":
+      context.fillStyle = tower.color;
+      context.beginPath();
+      context.arc(0, 0, 15, 0, Math.PI * 2);
+      context.fill();
+      context.lineWidth = 2;
+      context.strokeStyle = "#0097a7";
+      context.stroke();
+      // Snowflake/star
+      context.strokeStyle = "#fff";
+      for (let i = 0; i < 6; i++) {
+        context.save();
+        context.rotate((Math.PI / 3) * i);
+        context.beginPath();
+        context.moveTo(0, 0);
+        context.lineTo(0, -12);
+        context.stroke();
+        context.restore();
+      }
+      context.fillStyle = "#fff";
+      context.beginPath();
+      context.arc(0, 0, 5, 0, Math.PI * 2);
+      context.fill();
+      // Add a barrel
+      context.save();
+      context.rotate(0);
+      context.fillStyle = "#0097a7";
+      context.fillRect(0, -3, 13, 6);
+      context.restore();
+      break;
+    default:
+      context.fillStyle = "#888";
+      context.beginPath();
+      context.arc(0, 0, 15, 0, Math.PI * 2);
+      context.fill();
+      break;
+  }
+  context.restore();
 }
 
-// Draw tower placement preview
+// 10. Update drawTowerPlacement to snap to grid and highlight valid slot
 function drawTowerPlacement() {
   const rect = canvas.getBoundingClientRect();
   const mouseX = lastMouseX - rect.left;
   const mouseY = lastMouseY - rect.top;
-
-  if (
-    mouseX >= 0 &&
-    mouseX <= canvas.width &&
-    mouseY >= 0 &&
-    mouseY <= canvas.height
-  ) {
-    const towerConfig = getTowerConfig(gameState.selectedTowerType);
-
-    // Check if placement is valid
-    const isValid =
-      !isOnPath(mouseX, mouseY, 20) && !isTowerOverlap(mouseX, mouseY);
-
-    // Draw tower range
-    ctx.strokeStyle = isValid
-      ? "rgba(255, 255, 255, 0.3)"
-      : "rgba(255, 0, 0, 0.3)";
-    ctx.beginPath();
-    ctx.arc(mouseX, mouseY, towerConfig.range, 0, Math.PI * 2);
-    ctx.stroke();
-
-    // Draw tower
-    ctx.fillStyle = isValid ? towerConfig.color : "rgba(255, 0, 0, 0.7)";
-    ctx.beginPath();
-    ctx.arc(mouseX, mouseY, 15, 0, Math.PI * 2);
-    ctx.fill();
+  const cell = pixelToGrid({ x: mouseX, y: mouseY });
+  const center = gridToPixel(cell);
+  // Check if cell is on the path (tighter radius)
+  let onPath = false;
+  for (let i = 0; i < gameState.path.length - 1; i++) {
+    const a = gameState.path[i];
+    const b = gameState.path[i + 1];
+    const px = cell.x + 0.5,
+      py = cell.y + 0.5;
+    const ax = a.x,
+      ay = a.y,
+      bx = b.x,
+      by = b.y;
+    const t =
+      ((px - ax) * (bx - ax) + (py - ay) * (by - ay)) /
+      ((bx - ax) ** 2 + (by - ay) ** 2);
+    const closestX = ax + t * (bx - ax);
+    const closestY = ay + t * (by - ay);
+    const dist = Math.sqrt((px - closestX) ** 2 + (py - closestY) ** 2);
+    if (dist < 0.45) onPath = true;
   }
+  let occupied = false;
+  for (const tower of gameState.towers) {
+    const tcell = pixelToGrid({ x: tower.x, y: tower.y });
+    if (tcell.x === cell.x && tcell.y === cell.y) occupied = true;
+  }
+  ctx.save();
+  ctx.globalAlpha = 0.7;
+  ctx.translate(center.x, center.y);
+  drawTower(
+    {
+      ...getTowerConfig(gameState.selectedTowerType),
+      x: 0,
+      y: 0,
+      type: gameState.selectedTowerType,
+    },
+    0
+  );
+  ctx.restore();
+  // Highlight cell only
+  ctx.save();
+  ctx.lineWidth = 3;
+  if (onPath || occupied) {
+    ctx.strokeStyle = "rgba(233,69,96,0.7)";
+  } else {
+    ctx.strokeStyle = "rgba(46,204,113,0.7)";
+  }
+  ctx.strokeRect(cell.x * GRID_SIZE, cell.y * GRID_SIZE, GRID_SIZE, GRID_SIZE);
+  ctx.restore();
 }
 
 // Draw enemy
 function drawEnemy(enemy) {
-  // Draw enemy body
-  ctx.fillStyle = enemy.color;
-  ctx.beginPath();
-  ctx.arc(enemy.x, enemy.y, enemy.size, 0, Math.PI * 2);
-  ctx.fill();
-
+  ctx.save();
+  ctx.translate(enemy.x, enemy.y);
+  switch (enemy.color) {
+    case "#e74c3c": // basic
+      // Red circle with black outline
+      ctx.fillStyle = enemy.color;
+      ctx.beginPath();
+      ctx.arc(0, 0, enemy.size, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = "#222";
+      ctx.stroke();
+      // Eyes
+      ctx.fillStyle = "#fff";
+      ctx.beginPath();
+      ctx.arc(-4, -3, 2, 0, Math.PI * 2);
+      ctx.arc(4, -3, 2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#222";
+      ctx.beginPath();
+      ctx.arc(-4, -3, 1, 0, Math.PI * 2);
+      ctx.arc(4, -3, 1, 0, Math.PI * 2);
+      ctx.fill();
+      // Mouth
+      ctx.strokeStyle = "#222";
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.arc(0, 3, 4, 0, Math.PI);
+      ctx.stroke();
+      break;
+    case "#f1c40f": // fast
+      // Yellow triangle
+      ctx.fillStyle = enemy.color;
+      ctx.beginPath();
+      ctx.moveTo(0, -enemy.size);
+      ctx.lineTo(enemy.size, enemy.size);
+      ctx.lineTo(-enemy.size, enemy.size);
+      ctx.closePath();
+      ctx.fill();
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = "#b7950b";
+      ctx.stroke();
+      // Stripes
+      ctx.strokeStyle = "#fff";
+      ctx.lineWidth = 1;
+      for (let i = -1; i <= 1; i++) {
+        ctx.beginPath();
+        ctx.moveTo(i * enemy.size * 0.5, enemy.size * 0.5);
+        ctx.lineTo(i * enemy.size * 0.2, -enemy.size * 0.7);
+        ctx.stroke();
+      }
+      break;
+    case "#8e44ad": // tank
+      // Purple square with border
+      ctx.fillStyle = enemy.color;
+      ctx.fillRect(-enemy.size, -enemy.size, enemy.size * 2, enemy.size * 2);
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = "#fff";
+      ctx.strokeRect(-enemy.size, -enemy.size, enemy.size * 2, enemy.size * 2);
+      // Rivets
+      ctx.fillStyle = "#fff";
+      for (let i = -1; i <= 1; i += 2) {
+        for (let j = -1; j <= 1; j += 2) {
+          ctx.beginPath();
+          ctx.arc(
+            i * enemy.size * 0.7,
+            j * enemy.size * 0.7,
+            2,
+            0,
+            Math.PI * 2
+          );
+          ctx.fill();
+        }
+      }
+      // Bolts
+      ctx.fillStyle = "#b7950b";
+      for (let i = -1; i <= 1; i++) {
+        ctx.beginPath();
+        ctx.arc(i * enemy.size * 0.7, 0, 1.2, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.beginPath();
+        ctx.arc(0, i * enemy.size * 0.7, 1.2, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      // Hatch
+      ctx.strokeStyle = "#fff";
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.arc(0, 0, enemy.size * 0.5, 0, Math.PI * 2);
+      ctx.stroke();
+      break;
+    case "#c0392b": // boss
+      // Large red circle with crown
+      ctx.fillStyle = enemy.color;
+      ctx.beginPath();
+      ctx.arc(0, 0, enemy.size, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = "#ffd700";
+      ctx.stroke();
+      // Crown
+      ctx.fillStyle = "#ffd700";
+      ctx.beginPath();
+      ctx.moveTo(-10, -enemy.size - 2);
+      ctx.lineTo(-5, -enemy.size - 12);
+      ctx.lineTo(0, -enemy.size - 2);
+      ctx.lineTo(5, -enemy.size - 12);
+      ctx.lineTo(10, -enemy.size - 2);
+      ctx.closePath();
+      ctx.fill();
+      // Crown jewels
+      ctx.fillStyle = "#2196F3";
+      ctx.beginPath();
+      ctx.arc(-5, -enemy.size - 8, 1.5, 0, Math.PI * 2);
+      ctx.arc(0, -enemy.size - 11, 1.5, 0, Math.PI * 2);
+      ctx.arc(5, -enemy.size - 8, 1.5, 0, Math.PI * 2);
+      ctx.fill();
+      // Face
+      ctx.fillStyle = "#fff";
+      ctx.beginPath();
+      ctx.arc(-6, -3, 2.5, 0, Math.PI * 2);
+      ctx.arc(6, -3, 2.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#222";
+      ctx.beginPath();
+      ctx.arc(-6, -3, 1.2, 0, Math.PI * 2);
+      ctx.arc(6, -3, 1.2, 0, Math.PI * 2);
+      ctx.fill();
+      // Mouth
+      ctx.strokeStyle = "#222";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(0, 6, 6, 0, Math.PI);
+      ctx.stroke();
+      break;
+    default:
+      ctx.fillStyle = enemy.color;
+      ctx.beginPath();
+      ctx.arc(0, 0, enemy.size, 0, Math.PI * 2);
+      ctx.fill();
+      break;
+  }
+  ctx.restore();
   // Draw health bar
   const healthPercentage = enemy.currentHealth / enemy.maxHealth;
   const healthBarWidth = enemy.size * 2;
   const healthBarHeight = 4;
-
   ctx.fillStyle = "rgba(0, 0, 0, 0.5)";
   ctx.fillRect(
     enemy.x - healthBarWidth / 2,
@@ -793,7 +1273,6 @@ function drawEnemy(enemy) {
     healthBarWidth,
     healthBarHeight
   );
-
   ctx.fillStyle =
     healthPercentage > 0.5
       ? "#2ecc71"
@@ -839,6 +1318,11 @@ canvas.addEventListener("mousemove", (e) => {
   lastMouseY = e.clientY;
 });
 
+// Add a resize event to clear the cache if the canvas size changes
+window.addEventListener("resize", () => {
+  backgroundCache = null;
+});
+
 // Game loop
 function gameLoop(timestamp) {
   // Calculate delta time
@@ -857,3 +1341,15 @@ function gameLoop(timestamp) {
 
 // Initialize game when page loads
 window.addEventListener("load", initGame);
+
+// 4. Expose a function to render a tower to a canvas for the buying window
+window.renderTowerPreview = function (canvas, towerType) {
+  const ctx2 = canvas.getContext("2d");
+  ctx2.clearRect(0, 0, canvas.width, canvas.height);
+  const towerConfig = getTowerConfig(towerType);
+  // Center in canvas, face right
+  ctx2.save();
+  ctx2.translate(canvas.width / 2, canvas.height / 2);
+  drawTower({ ...towerConfig, x: 0, y: 0, type: towerType }, 0, ctx2);
+  ctx2.restore();
+};

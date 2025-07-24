@@ -23,15 +23,39 @@
       <div class="controls">
         <div class="towers">
           <div class="tower-option" id="basicTower" data-cost="50">
-            <div class="tower basic-tower"></div>
+            <canvas
+              class="tower-canvas"
+              data-tower="basicTower"
+              width="40"
+              height="40"
+            ></canvas>
             <div class="tower-info">Basic Tower<br />Cost: 50</div>
           </div>
           <div class="tower-option" id="sniperTower" data-cost="100">
-            <div class="tower sniper-tower"></div>
+            <canvas
+              class="tower-canvas"
+              data-tower="sniperTower"
+              width="40"
+              height="40"
+            ></canvas>
             <div class="tower-info">Sniper Tower<br />Cost: 100</div>
           </div>
+          <div class="tower-option" id="slowTower" data-cost="120">
+            <canvas
+              class="tower-canvas"
+              data-tower="slowTower"
+              width="40"
+              height="40"
+            ></canvas>
+            <div class="tower-info">Slow Tower<br />Cost: 120</div>
+          </div>
           <div class="tower-option" id="aoeTower" data-cost="150">
-            <div class="tower aoe-tower"></div>
+            <canvas
+              class="tower-canvas"
+              data-tower="aoeTower"
+              width="40"
+              height="40"
+            ></canvas>
             <div class="tower-info">AoE Tower<br />Cost: 150</div>
           </div>
         </div>
@@ -42,6 +66,75 @@
       </div>
       <div id="gameMessage"></div>
     </div>
+    <div
+      id="gameOverModal"
+      style="
+        display: none;
+        position: fixed;
+        left: 0;
+        top: 0;
+        width: 100vw;
+        height: 100vh;
+        background: rgba(0, 0, 0, 0.7);
+        z-index: 1000;
+        justify-content: center;
+        align-items: center;
+      "
+    >
+      <div
+        style="
+          background: #fff;
+          color: #222;
+          padding: 32px 40px;
+          border-radius: 12px;
+          box-shadow: 0 4px 32px #0008;
+          text-align: center;
+          min-width: 300px;
+        "
+      >
+        <h2 id="gameOverTitle">Game Over!</h2>
+        <p id="gameOverText"></p>
+        <button
+          id="restartGameBtn"
+          style="
+            margin-top: 20px;
+            padding: 10px 24px;
+            font-size: 18px;
+            border: none;
+            border-radius: 6px;
+            background: #e94560;
+            color: #fff;
+            cursor: pointer;
+          "
+        >
+          Restart
+        </button>
+      </div>
+    </div>
     <script src="game.js"></script>
+    <script>
+      window.addEventListener("load", function () {
+        document.querySelectorAll(".tower-canvas").forEach(function (canvas) {
+          const towerType = canvas.getAttribute("data-tower");
+          if (window.renderTowerPreview) {
+            window.renderTowerPreview(canvas, towerType);
+          } else {
+            // fallback: fill with color
+            const ctx = canvas.getContext("2d");
+            ctx.fillStyle = "#888";
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+          }
+        });
+        // Game over modal logic
+        window.showGameOverModal = function (message) {
+          document.getElementById("gameOverText").textContent = message;
+          document.getElementById("gameOverModal").style.display = "flex";
+        };
+        document.getElementById("restartGameBtn").onclick = function () {
+          document.getElementById("gameOverModal").style.display = "none";
+          if (window.resetGame) window.resetGame();
+        };
+      });
+    </script>
   </body>
 </html>

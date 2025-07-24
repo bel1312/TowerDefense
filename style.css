@@ -162,6 +162,14 @@ button:disabled {
   transform: translate(-50%, -50%);
 }
 
+.tower-canvas {
+  width: 40px;
+  height: 40px;
+  display: block;
+  background: transparent;
+  margin-bottom: 5px;
+}
+
 @media (max-width: 600px) {
   .game-area {
     height: 300px;
