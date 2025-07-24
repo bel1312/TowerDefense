@@ -252,6 +252,28 @@ function drawBase() {
   ctx.closePath();
   ctx.fill();
   ctx.stroke();
+  // Brick pattern
+  ctx.save();
+  ctx.strokeStyle = "#aaa";
+  ctx.lineWidth = 1;
+  for (let y = -0.7; y < 0.7; y += 0.13) {
+    ctx.beginPath();
+    ctx.moveTo(-GRID_SIZE * 0.7, GRID_SIZE * y);
+    ctx.lineTo(GRID_SIZE * 0.7, GRID_SIZE * y);
+    ctx.stroke();
+    // Offset bricks every other row
+    for (
+      let x = -0.7 + (Math.abs(y * 100) % 2 ? 0.065 : 0);
+      x < 0.7;
+      x += 0.13
+    ) {
+      ctx.beginPath();
+      ctx.moveTo(GRID_SIZE * x, GRID_SIZE * y);
+      ctx.lineTo(GRID_SIZE * (x + 0.065), GRID_SIZE * y);
+      ctx.stroke();
+    }
+  }
+  ctx.restore();
   // Draw battlements
   ctx.fillStyle = "#888";
   for (let i = -2; i <= 2; i++) {
@@ -262,6 +284,39 @@ function drawBase() {
       GRID_SIZE * 0.13
     );
   }
+  // Draw flag/banner
+  ctx.save();
+  ctx.beginPath();
+  ctx.moveTo(0, -GRID_SIZE * 0.95);
+  ctx.lineTo(GRID_SIZE * 0.18, -GRID_SIZE * 1.15);
+  ctx.lineTo(0, -GRID_SIZE * 1.15);
+  ctx.closePath();
+  ctx.fillStyle = "#e94560";
+  ctx.globalAlpha = 0.85;
+  ctx.fill();
+  ctx.globalAlpha = 1;
+  ctx.strokeStyle = "#b5835d";
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(0, -GRID_SIZE * 0.7);
+  ctx.lineTo(0, -GRID_SIZE * 1.15);
+  ctx.stroke();
+  ctx.restore();
+  // Draw window above the gate arch
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(0, -GRID_SIZE * 0.45, GRID_SIZE * 0.22, Math.PI, 0, false);
+  ctx.lineTo(GRID_SIZE * 0.22, -GRID_SIZE * 0.45);
+  ctx.lineTo(-GRID_SIZE * 0.22, -GRID_SIZE * 0.45);
+  ctx.closePath();
+  ctx.fillStyle = "#2196f3";
+  ctx.globalAlpha = 0.7;
+  ctx.fill();
+  ctx.globalAlpha = 1;
+  ctx.strokeStyle = "#1565c0";
+  ctx.lineWidth = 2;
+  ctx.stroke();
+  ctx.restore();
   // Draw gate arch
   ctx.beginPath();
   ctx.arc(0, GRID_SIZE * 0.7, GRID_SIZE * 0.35, Math.PI, 0, false);
@@ -272,7 +327,8 @@ function drawBase() {
   ctx.globalAlpha = baseHitAnim.active ? 0.8 : 1;
   ctx.fill();
   ctx.globalAlpha = 1;
-  // Gate lines
+  // Wood grain on the gate
+  ctx.save();
   ctx.strokeStyle = "#3e2723";
   ctx.lineWidth = 2;
   for (let i = -1; i <= 1; i++) {
@@ -280,8 +336,23 @@ function drawBase() {
     ctx.moveTo(i * GRID_SIZE * 0.18, GRID_SIZE * 0.7);
     ctx.lineTo(i * GRID_SIZE * 0.18, GRID_SIZE * 0.7 - GRID_SIZE * 0.35);
     ctx.stroke();
+    // Wood grain
+    ctx.strokeStyle = "rgba(255,255,255,0.12)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.arc(
+      i * GRID_SIZE * 0.18,
+      GRID_SIZE * 0.7 - GRID_SIZE * 0.18,
+      GRID_SIZE * 0.08,
+      Math.PI * 0.2,
+      Math.PI * 1.8
+    );
+    ctx.stroke();
+    ctx.strokeStyle = "#3e2723";
+    ctx.lineWidth = 2;
   }
-  // Flashing thick red border
+  ctx.restore();
+  // Flashing thick red border when hit
   if (baseHitAnim.active) {
     ctx.save();
     ctx.lineWidth = 10;
@@ -380,6 +451,14 @@ function initGame() {
       const towerType = option.id;
       const towerCost = parseInt(option.dataset.cost);
 
+      // Deselect if already selected
+      if (gameState.selectedTowerType === towerType) {
+        gameState.selectedTowerType = null;
+        towerOptions.forEach((opt) => opt.classList.remove("selected"));
+        displayMessage("Tower selection cleared.");
+        return;
+      }
+
       if (gameState.gold >= towerCost) {
         gameState.selectedTowerType = towerType;
 
@@ -438,28 +517,38 @@ function initGame() {
   requestAnimationFrame(gameLoop);
 }
 
-// 8. Restrict tower placement to valid grid cells
-function placeTower(x, y) {
-  const cell = pixelToGrid({ x, y });
-  // Check if cell is on the path (tighter radius)
-  let onPath = false;
+// Refactor: Use a helper to check if a cell is on the path (pixel-based, matches visual)
+function isCellOnPath(cell) {
+  const center = gridToPixel(cell);
   for (let i = 0; i < gameState.path.length - 1; i++) {
     const a = gameState.path[i];
     const b = gameState.path[i + 1];
-    const px = cell.x + 0.5,
-      py = cell.y + 0.5;
-    const ax = a.x,
-      ay = a.y,
-      bx = b.x,
-      by = b.y;
-    const t =
-      ((px - ax) * (bx - ax) + (py - ay) * (by - ay)) /
-      ((bx - ax) ** 2 + (by - ay) ** 2);
+    const ax = gridToPixel(a).x,
+      ay = gridToPixel(a).y,
+      bx = gridToPixel(b).x,
+      by = gridToPixel(b).y;
+    const px = center.x,
+      py = center.y;
+    const t = Math.max(
+      0,
+      Math.min(
+        1,
+        ((px - ax) * (bx - ax) + (py - ay) * (by - ay)) /
+          ((bx - ax) ** 2 + (by - ay) ** 2)
+      )
+    );
     const closestX = ax + t * (bx - ax);
     const closestY = ay + t * (by - ay);
     const dist = Math.sqrt((px - closestX) ** 2 + (py - closestY) ** 2);
-    if (dist < 0.45) onPath = true;
+    if (dist < GRID_SIZE * 0.4) return true;
   }
+  return false;
+}
+
+// Use isCellOnPath in placeTower
+function placeTower(x, y) {
+  const cell = pixelToGrid({ x, y });
+  let onPath = isCellOnPath(cell);
   // Check if cell is occupied
   let occupied = false;
   for (const tower of gameState.towers) {
@@ -1068,40 +1157,27 @@ function drawTowerPlacement() {
   const mouseY = lastMouseY - rect.top;
   const cell = pixelToGrid({ x: mouseX, y: mouseY });
   const center = gridToPixel(cell);
-  // Check if cell is on the path (tighter radius)
-  let onPath = false;
-  for (let i = 0; i < gameState.path.length - 1; i++) {
-    const a = gameState.path[i];
-    const b = gameState.path[i + 1];
-    const px = cell.x + 0.5,
-      py = cell.y + 0.5;
-    const ax = a.x,
-      ay = a.y,
-      bx = b.x,
-      by = b.y;
-    const t =
-      ((px - ax) * (bx - ax) + (py - ay) * (by - ay)) /
-      ((bx - ax) ** 2 + (by - ay) ** 2);
-    const closestX = ax + t * (bx - ax);
-    const closestY = ay + t * (by - ay);
-    const dist = Math.sqrt((px - closestX) ** 2 + (py - closestY) ** 2);
-    if (dist < 0.45) onPath = true;
-  }
+  let onPath = isCellOnPath(cell);
   let occupied = false;
   for (const tower of gameState.towers) {
     const tcell = pixelToGrid({ x: tower.x, y: tower.y });
     if (tcell.x === cell.x && tcell.y === cell.y) occupied = true;
   }
+  // Draw range indicator
+  const towerConfig = getTowerConfig(gameState.selectedTowerType);
+  ctx.save();
+  ctx.globalAlpha = 0.18;
+  ctx.beginPath();
+  ctx.arc(center.x, center.y, towerConfig.range, 0, Math.PI * 2);
+  ctx.fillStyle = onPath || occupied ? "#e94560" : "#2196f3";
+  ctx.fill();
+  ctx.restore();
+  // Draw tower preview
   ctx.save();
   ctx.globalAlpha = 0.7;
   ctx.translate(center.x, center.y);
   drawTower(
-    {
-      ...getTowerConfig(gameState.selectedTowerType),
-      x: 0,
-      y: 0,
-      type: gameState.selectedTowerType,
-    },
+    { ...towerConfig, x: 0, y: 0, type: gameState.selectedTowerType },
     0
   );
   ctx.restore();
