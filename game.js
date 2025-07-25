@@ -131,6 +131,10 @@ let backgroundCacheHeight = 0;
 let baseHitAnim = { active: false, timer: 0 };
 let screenFlash = { active: false, timer: 0 };
 
+// Visual effects
+let cameraShake = { active: false, intensity: 0, timer: 0 };
+let projectileTrails = [];
+
 // Add high score to game state
 let highScore = parseInt(localStorage.getItem("td_highscore") || "0", 10);
 
@@ -298,15 +302,29 @@ function drawPath() {
   ctx.restore();
 }
 
-// Draw a castle gate at the end of the path
+// Draw enhanced castle at the end of the path
 function drawBase() {
   const end = gridToPixel(gameState.path[gameState.path.length - 1]);
   ctx.save();
   ctx.translate(end.x, end.y);
-  // Draw castle wall
-  ctx.fillStyle = "#b0b0b0";
-  ctx.strokeStyle = "#888";
-  ctx.lineWidth = 4;
+
+  // Add castle glow
+  ctx.shadowColor = baseHitAnim.active ? "#e94560" : "#4a90e2";
+  ctx.shadowBlur = baseHitAnim.active ? 20 : 10;
+
+  // Draw castle wall with gradient
+  const wallGrad = ctx.createLinearGradient(
+    -GRID_SIZE * 0.7,
+    -GRID_SIZE * 0.7,
+    GRID_SIZE * 0.7,
+    GRID_SIZE * 0.7
+  );
+  wallGrad.addColorStop(0, "#d5d5d5");
+  wallGrad.addColorStop(0.5, "#b0b0b0");
+  wallGrad.addColorStop(1, "#8a8a8a");
+  ctx.fillStyle = wallGrad;
+  ctx.strokeStyle = baseHitAnim.active ? "#e94560" : "#666";
+  ctx.lineWidth = baseHitAnim.active ? 6 : 4;
   ctx.beginPath();
   ctx.moveTo(-GRID_SIZE * 0.7, GRID_SIZE * 0.7);
   ctx.lineTo(-GRID_SIZE * 0.7, -GRID_SIZE * 0.7);
@@ -347,15 +365,25 @@ function drawBase() {
       GRID_SIZE * 0.13
     );
   }
-  // Draw flag/banner
+  // Draw animated flag/banner
   ctx.save();
+  const flagWave = Math.sin(Date.now() / 200) * 2;
   ctx.beginPath();
   ctx.moveTo(0, -GRID_SIZE * 0.95);
-  ctx.lineTo(GRID_SIZE * 0.18, -GRID_SIZE * 1.15);
-  ctx.lineTo(0, -GRID_SIZE * 1.15);
+  ctx.lineTo(GRID_SIZE * 0.18 + flagWave, -GRID_SIZE * 1.15);
+  ctx.lineTo(flagWave, -GRID_SIZE * 1.15);
   ctx.closePath();
-  ctx.fillStyle = "#e94560";
-  ctx.globalAlpha = 0.85;
+
+  const flagGrad = ctx.createLinearGradient(
+    0,
+    -GRID_SIZE * 1.15,
+    GRID_SIZE * 0.18,
+    -GRID_SIZE * 1.15
+  );
+  flagGrad.addColorStop(0, "#e94560");
+  flagGrad.addColorStop(1, "#c0392b");
+  ctx.fillStyle = flagGrad;
+  ctx.globalAlpha = 0.9;
   ctx.fill();
   ctx.globalAlpha = 1;
   ctx.strokeStyle = "#b5835d";
@@ -415,29 +443,57 @@ function drawBase() {
     ctx.lineWidth = 2;
   }
   ctx.restore();
-  // Flashing thick red border when hit
+  // Enhanced damage effect
   if (baseHitAnim.active) {
     ctx.save();
-    ctx.lineWidth = 10;
-    ctx.strokeStyle = `rgba(233,69,96,${
-      0.7 + 0.3 * Math.sin(Date.now() / 80)
-    })`;
+    const damageIntensity = 0.7 + 0.3 * Math.sin(Date.now() / 60);
+    ctx.lineWidth = 12;
+    ctx.strokeStyle = `rgba(233,69,96,${damageIntensity})`;
+    ctx.shadowColor = "#e94560";
+    ctx.shadowBlur = 15;
     ctx.beginPath();
-    ctx.arc(0, GRID_SIZE * 0.35, GRID_SIZE * 0.48, Math.PI, 0, false);
+    ctx.arc(0, 0, GRID_SIZE * 0.8, 0, Math.PI * 2);
     ctx.stroke();
+
+    // Add sparks
+    for (let i = 0; i < 6; i++) {
+      const angle = (Math.PI * 2 * i) / 6 + Date.now() / 100;
+      const sparkX = Math.cos(angle) * GRID_SIZE * 0.9;
+      const sparkY = Math.sin(angle) * GRID_SIZE * 0.9;
+      ctx.fillStyle = `rgba(255, 255, 255, ${damageIntensity})`;
+      ctx.beginPath();
+      ctx.arc(sparkX, sparkY, 2, 0, Math.PI * 2);
+      ctx.fill();
+    }
     ctx.restore();
   }
+
+  ctx.shadowBlur = 0;
   ctx.restore();
 }
 
-// Draw a red screen flash overlay
+// Draw enhanced screen flash overlay
 function drawScreenFlash() {
   if (screenFlash.active) {
     ctx.save();
-    ctx.globalAlpha = Math.min(0.55, screenFlash.timer * 2.5);
-    ctx.fillStyle = "#e94560";
+    const intensity = Math.min(0.6, screenFlash.timer * 3);
+    const pulse = Math.sin(Date.now() / 50) * 0.1 + 0.9;
+
+    // Create radial gradient for dramatic effect
+    const flashGrad = ctx.createRadialGradient(
+      canvas.width / 2,
+      canvas.height / 2,
+      0,
+      canvas.width / 2,
+      canvas.height / 2,
+      Math.max(canvas.width, canvas.height)
+    );
+    flashGrad.addColorStop(0, `rgba(233, 69, 96, ${intensity * pulse})`);
+    flashGrad.addColorStop(0.7, `rgba(233, 69, 96, ${intensity * 0.3})`);
+    flashGrad.addColorStop(1, "rgba(233, 69, 96, 0)");
+
+    ctx.fillStyle = flashGrad;
     ctx.fillRect(0, 0, canvas.width, canvas.height);
-    ctx.globalAlpha = 1;
     ctx.restore();
   }
 }
@@ -630,6 +686,7 @@ function placeTower(x, y) {
   const towerConfig = getTowerConfig(towerType);
   const towerCost = towerConfig.cost;
   if (gameState.gold >= towerCost) {
+    if (window.soundSystem) window.soundSystem.playSound("place");
     const center = gridToPixel(cell);
     const tower = {
       x: center.x,
@@ -795,8 +852,20 @@ function update(deltaTime) {
 
     // Check if enemy reached the end
     if (enemy.pathIndex >= gameState.path.length - 1) {
+      if (window.soundSystem) window.soundSystem.playSound("life");
+      const end = gridToPixel(gameState.path[gameState.path.length - 1]);
       gameState.enemies.splice(i, 1);
       gameState.lives--;
+
+      // Visual effects for life lost
+      baseHitAnim.active = true;
+      baseHitAnim.timer = 0.5;
+      screenFlash.active = true;
+      screenFlash.timer = 0.3;
+      cameraShake.active = true;
+      cameraShake.intensity = 8;
+      cameraShake.timer = 0.4;
+
       updateUI();
 
       if (gameState.lives <= 0 && !gameState.gameOver) {
@@ -836,6 +905,17 @@ function update(deltaTime) {
       if (distance < 5) {
         // Apply AOE damage
         applyAoeDamage(projectile);
+
+        // Create explosion effect
+        if (window.particleSystem) {
+          window.particleSystem.createExplosion(
+            projectile.targetX,
+            projectile.targetY,
+            "#ff6b35",
+            12
+          );
+        }
+
         gameState.projectiles.splice(i, 1);
       }
     } else {
@@ -849,6 +929,13 @@ function update(deltaTime) {
         if (distance < enemy.size) {
           // Apply damage
           enemy.currentHealth -= projectile.damage;
+          if (window.soundSystem) window.soundSystem.playSound("hit");
+
+          // Create hit particles
+          if (window.particleSystem) {
+            window.particleSystem.createHit(enemy.x, enemy.y, enemy.color);
+          }
+
           // Apply slow if slowTower
           if (
             projectile.towerType === "slowTower" &&
@@ -902,6 +989,30 @@ function update(deltaTime) {
     if (screenFlash.timer <= 0) {
       screenFlash.active = false;
       screenFlash.timer = 0;
+    }
+  }
+
+  // Animate camera shake
+  if (cameraShake.active) {
+    cameraShake.timer -= deltaTime / 1000;
+    cameraShake.intensity *= 0.95;
+    if (cameraShake.timer <= 0) {
+      cameraShake.active = false;
+      cameraShake.intensity = 0;
+    }
+  }
+
+  // Update particles
+  if (window.particleSystem) {
+    window.particleSystem.update(deltaTime);
+  }
+
+  // Update projectile trails
+  for (let i = projectileTrails.length - 1; i >= 0; i--) {
+    const trail = projectileTrails[i];
+    trail.life -= deltaTime / 1000;
+    if (trail.life <= 0) {
+      projectileTrails.splice(i, 1);
     }
   }
 }
@@ -971,6 +1082,14 @@ function findTarget(tower) {
 
 // Tower shoots at target
 function shoot(tower, target) {
+  if (window.soundSystem) window.soundSystem.playSound("shoot");
+
+  // Create muzzle flash
+  const angle = Math.atan2(target.y - tower.y, target.x - tower.x);
+  if (window.particleSystem) {
+    window.particleSystem.createMuzzleFlash(tower.x, tower.y, angle);
+  }
+
   const projectile = {
     x: tower.x,
     y: tower.y,
@@ -1010,6 +1129,13 @@ function applyAoeDamage(projectile) {
     const dy = enemy.y - projectile.targetY;
     const distance = Math.sqrt(dx * dx + dy * dy);
     if (distance <= projectile.aoeRadius) {
+      if (window.soundSystem) window.soundSystem.playSound("hit");
+
+      // Create hit particles
+      if (window.particleSystem) {
+        window.particleSystem.createHit(enemy.x, enemy.y, enemy.color);
+      }
+
       enemy.currentHealth -= projectile.damage; // No falloff
       if (enemy.currentHealth <= 0) {
         defeatEnemy(enemy, i);
@@ -1023,6 +1149,12 @@ function defeatEnemy(enemy, index) {
   gameState.gold += enemy.reward;
   gameState.score += enemy.reward;
   gameState.enemiesDefeated++;
+
+  // Create gold pickup effect
+  if (window.particleSystem) {
+    window.particleSystem.createGoldEffect(enemy.x, enemy.y);
+  }
+
   gameState.enemies.splice(index, 1);
   updateUI();
 }
@@ -1087,11 +1219,23 @@ function resetGame() {
 
 // 9. Update draw() to use new background, path, and grid
 function draw() {
+  ctx.save();
+
+  // Apply camera shake
+  if (cameraShake.active) {
+    const shakeX = (Math.random() - 0.5) * cameraShake.intensity;
+    const shakeY = (Math.random() - 0.5) * cameraShake.intensity;
+    ctx.translate(shakeX, shakeY);
+  }
+
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   drawBackground();
   drawPath();
   drawBase();
-  // No drawGridOverlay();
+
+  // Draw projectile trails
+  drawProjectileTrails();
+
   for (const tower of gameState.towers) {
     const target = findTarget(tower);
     let angle = 0;
@@ -1099,16 +1243,32 @@ function draw() {
       angle = Math.atan2(target.y - tower.y, target.x - tower.x);
     }
     drawTower(tower, angle);
+
+    // Draw range indicator for selected tower
+    if (gameState.selectedTowerType && target) {
+      drawRangeIndicator(tower);
+    }
   }
+
   if (gameState.selectedTowerType) {
     drawTowerPlacement();
   }
+
   for (const enemy of gameState.enemies) {
     drawEnemy(enemy);
   }
+
   for (const projectile of gameState.projectiles) {
     drawProjectile(projectile);
   }
+
+  // Draw particles
+  if (window.particleSystem) {
+    window.particleSystem.draw(ctx);
+  }
+
+  ctx.restore();
+
   drawScreenFlash();
 }
 
@@ -1117,96 +1277,166 @@ function drawTower(tower, facingAngle = 0, context = ctx) {
   context.save();
   context.translate(tower.x, tower.y);
   context.rotate(facingAngle);
+
+  // Add glow effect for all towers
+  context.shadowColor = tower.color;
+  context.shadowBlur = 8;
+
   switch (tower.type) {
     case "basicTower":
-      context.fillStyle = tower.color;
+      // Base
+      const gradient1 = context.createRadialGradient(0, 0, 0, 0, 0, 15);
+      gradient1.addColorStop(0, tower.color);
+      gradient1.addColorStop(1, "#2e7d32");
+      context.fillStyle = gradient1;
       context.beginPath();
       context.arc(0, 0, 15, 0, Math.PI * 2);
       context.fill();
       context.lineWidth = 2;
-      context.strokeStyle = "#222";
+      context.strokeStyle = "#1b5e20";
       context.stroke();
+
+      // Inner core
+      context.shadowBlur = 4;
       context.fillStyle = "#fff";
       context.beginPath();
       context.arc(0, 0, 7, 0, Math.PI * 2);
       context.fill();
-      // Add a barrel
+
+      // Barrel with gradient
       context.save();
       context.rotate(0);
-      context.fillStyle = "#222";
+      const barrelGrad = context.createLinearGradient(0, -3, 0, 3);
+      barrelGrad.addColorStop(0, "#333");
+      barrelGrad.addColorStop(0.5, "#222");
+      barrelGrad.addColorStop(1, "#111");
+      context.fillStyle = barrelGrad;
       context.fillRect(0, -3, 15, 6);
+      context.strokeStyle = "#000";
+      context.lineWidth = 1;
+      context.strokeRect(0, -3, 15, 6);
       context.restore();
       break;
     case "sniperTower":
-      context.fillStyle = tower.color;
+      // Base with gradient
+      const gradient2 = context.createRadialGradient(0, 0, 0, 0, 0, 13);
+      gradient2.addColorStop(0, tower.color);
+      gradient2.addColorStop(1, "#0D47A1");
+      context.fillStyle = gradient2;
       context.beginPath();
       context.arc(0, 0, 13, 0, Math.PI * 2);
       context.fill();
       context.lineWidth = 2;
       context.strokeStyle = "#0D47A1";
       context.stroke();
-      // Barrel
+
+      // Long barrel with metallic effect
       context.save();
       context.rotate(0);
-      context.fillStyle = "#0D47A1";
+      const sniperBarrel = context.createLinearGradient(0, -3, 0, 3);
+      sniperBarrel.addColorStop(0, "#1565c0");
+      sniperBarrel.addColorStop(0.5, "#0D47A1");
+      sniperBarrel.addColorStop(1, "#0a3d91");
+      context.fillStyle = sniperBarrel;
       context.fillRect(0, -3, 22, 6);
+
+      // Barrel highlights
+      context.fillStyle = "rgba(255,255,255,0.3)";
+      context.fillRect(0, -2, 22, 1);
       context.restore();
+
+      // Scope
       context.fillStyle = "#fff";
       context.beginPath();
       context.arc(0, 0, 6, 0, Math.PI * 2);
       context.fill();
+      context.strokeStyle = "#0D47A1";
+      context.lineWidth = 1;
+      context.stroke();
       break;
     case "aoeTower":
-      context.fillStyle = tower.color;
+      // Pulsing base
+      const pulseIntensity = 0.8 + 0.2 * Math.sin(Date.now() / 200);
+      const gradient3 = context.createRadialGradient(0, 0, 0, 0, 0, 15);
+      gradient3.addColorStop(0, `rgba(255, 152, 0, ${pulseIntensity})`);
+      gradient3.addColorStop(1, "#E65100");
+      context.fillStyle = gradient3;
       context.beginPath();
       context.arc(0, 0, 15, 0, Math.PI * 2);
       context.fill();
       context.lineWidth = 2;
       context.strokeStyle = "#E65100";
       context.stroke();
-      // Radiating lines
-      context.strokeStyle = "#fff";
+
+      // Animated radiating lines
+      context.strokeStyle = `rgba(255, 255, 255, ${pulseIntensity})`;
+      context.lineWidth = 2;
       for (let i = 0; i < 8; i++) {
         context.save();
-        context.rotate((Math.PI / 4) * i);
+        context.rotate((Math.PI / 4) * i + Date.now() / 1000);
         context.beginPath();
         context.moveTo(0, 0);
         context.lineTo(0, -15);
         context.stroke();
         context.restore();
       }
+
+      // Glowing center
+      context.shadowBlur = 10;
       context.fillStyle = "#fff";
       context.beginPath();
       context.arc(0, 0, 6, 0, Math.PI * 2);
       context.fill();
       break;
     case "slowTower":
-      context.fillStyle = tower.color;
+      // Icy base with frost effect
+      const gradient4 = context.createRadialGradient(0, 0, 0, 0, 0, 15);
+      gradient4.addColorStop(0, "#4dd0e1");
+      gradient4.addColorStop(1, "#0097a7");
+      context.fillStyle = gradient4;
       context.beginPath();
       context.arc(0, 0, 15, 0, Math.PI * 2);
       context.fill();
       context.lineWidth = 2;
       context.strokeStyle = "#0097a7";
       context.stroke();
-      // Snowflake/star
-      context.strokeStyle = "#fff";
+
+      // Rotating snowflake
+      const rotation = Date.now() / 1000;
+      context.strokeStyle = "rgba(255, 255, 255, 0.9)";
+      context.lineWidth = 2;
       for (let i = 0; i < 6; i++) {
         context.save();
-        context.rotate((Math.PI / 3) * i);
+        context.rotate((Math.PI / 3) * i + rotation);
         context.beginPath();
         context.moveTo(0, 0);
         context.lineTo(0, -12);
         context.stroke();
+        // Add small branches
+        context.beginPath();
+        context.moveTo(0, -8);
+        context.lineTo(-2, -6);
+        context.moveTo(0, -8);
+        context.lineTo(2, -6);
+        context.stroke();
         context.restore();
       }
-      context.fillStyle = "#fff";
+
+      // Glowing center
+      context.shadowBlur = 8;
+      context.fillStyle = "#e1f5fe";
       context.beginPath();
       context.arc(0, 0, 5, 0, Math.PI * 2);
       context.fill();
-      // Add a barrel
+
+      // Frost barrel
       context.save();
       context.rotate(0);
-      context.fillStyle = "#0097a7";
+      context.shadowBlur = 4;
+      const barrelGrad2 = context.createLinearGradient(0, -3, 0, 3);
+      barrelGrad2.addColorStop(0, "#4dd0e1");
+      barrelGrad2.addColorStop(1, "#0097a7");
+      context.fillStyle = barrelGrad2;
       context.fillRect(0, -3, 13, 6);
       context.restore();
       break;
@@ -1217,6 +1447,9 @@ function drawTower(tower, facingAngle = 0, context = ctx) {
       context.fill();
       break;
   }
+
+  // Reset shadow
+  context.shadowBlur = 0;
   context.restore();
 }
 
@@ -1267,65 +1500,124 @@ function drawTowerPlacement() {
 function drawEnemy(enemy) {
   ctx.save();
   ctx.translate(enemy.x, enemy.y);
+
+  // Add glow effect
+  ctx.shadowColor = enemy.color;
+  ctx.shadowBlur = 6;
+
   switch (enemy.color) {
-    case "#e74c3c": // basic
-      // Red circle with black outline
-      ctx.fillStyle = enemy.color;
+    case "#e74c3c": // basic - Armored Soldier
+      // Body gradient
+      const basicGrad = ctx.createRadialGradient(0, 0, 0, 0, 0, enemy.size);
+      basicGrad.addColorStop(0, "#ff6b6b");
+      basicGrad.addColorStop(1, "#e74c3c");
+      ctx.fillStyle = basicGrad;
       ctx.beginPath();
       ctx.arc(0, 0, enemy.size, 0, Math.PI * 2);
       ctx.fill();
-      ctx.lineWidth = 2;
-      ctx.strokeStyle = "#222";
+
+      // Armor plating
+      ctx.strokeStyle = "#c0392b";
+      ctx.lineWidth = 3;
       ctx.stroke();
-      // Eyes
-      ctx.fillStyle = "#fff";
+
+      // Helmet
+      ctx.fillStyle = "#34495e";
       ctx.beginPath();
-      ctx.arc(-4, -3, 2, 0, Math.PI * 2);
-      ctx.arc(4, -3, 2, 0, Math.PI * 2);
+      ctx.arc(0, -3, enemy.size * 0.8, Math.PI, 0);
       ctx.fill();
-      ctx.fillStyle = "#222";
+
+      // Visor
+      ctx.fillStyle = "#2c3e50";
+      ctx.fillRect(-8, -8, 16, 4);
+
+      // Eyes glow
+      ctx.shadowBlur = 8;
+      ctx.fillStyle = "#ff4757";
       ctx.beginPath();
-      ctx.arc(-4, -3, 1, 0, Math.PI * 2);
-      ctx.arc(4, -3, 1, 0, Math.PI * 2);
+      ctx.arc(-4, -6, 1.5, 0, Math.PI * 2);
+      ctx.arc(4, -6, 1.5, 0, Math.PI * 2);
       ctx.fill();
-      // Mouth
-      ctx.strokeStyle = "#222";
-      ctx.lineWidth = 1.5;
-      ctx.beginPath();
-      ctx.arc(0, 3, 4, 0, Math.PI);
-      ctx.stroke();
       break;
-    case "#f1c40f": // fast
-      // Yellow triangle
-      ctx.fillStyle = enemy.color;
+    case "#f1c40f": // fast - Lightning Scout
+      // Electric aura
+      const time = Date.now() / 100;
+      ctx.shadowBlur = 10 + 5 * Math.sin(time);
+
+      // Body with electric gradient
+      const fastGrad = ctx.createRadialGradient(0, 0, 0, 0, 0, enemy.size);
+      fastGrad.addColorStop(0, "#fff");
+      fastGrad.addColorStop(0.3, "#f1c40f");
+      fastGrad.addColorStop(1, "#d4ac0d");
+      ctx.fillStyle = fastGrad;
       ctx.beginPath();
       ctx.moveTo(0, -enemy.size);
       ctx.lineTo(enemy.size, enemy.size);
       ctx.lineTo(-enemy.size, enemy.size);
       ctx.closePath();
       ctx.fill();
-      ctx.lineWidth = 2;
-      ctx.strokeStyle = "#b7950b";
-      ctx.stroke();
-      // Stripes
+
+      // Lightning bolts
       ctx.strokeStyle = "#fff";
-      ctx.lineWidth = 1;
-      for (let i = -1; i <= 1; i++) {
+      ctx.lineWidth = 2;
+      ctx.shadowBlur = 15;
+      for (let i = 0; i < 3; i++) {
+        ctx.save();
+        ctx.rotate((Math.PI * 2 * i) / 3 + time / 10);
         ctx.beginPath();
-        ctx.moveTo(i * enemy.size * 0.5, enemy.size * 0.5);
-        ctx.lineTo(i * enemy.size * 0.2, -enemy.size * 0.7);
+        ctx.moveTo(0, -enemy.size * 0.3);
+        ctx.lineTo(3, -enemy.size * 0.6);
+        ctx.lineTo(-2, -enemy.size * 0.8);
+        ctx.lineTo(4, -enemy.size);
         ctx.stroke();
+        ctx.restore();
       }
-      break;
-    case "#8e44ad": // tank
-      // Purple square with border
-      ctx.fillStyle = enemy.color;
-      ctx.fillRect(-enemy.size, -enemy.size, enemy.size * 2, enemy.size * 2);
-      ctx.lineWidth = 2;
-      ctx.strokeStyle = "#fff";
-      ctx.strokeRect(-enemy.size, -enemy.size, enemy.size * 2, enemy.size * 2);
-      // Rivets
+
+      // Core
       ctx.fillStyle = "#fff";
+      ctx.beginPath();
+      ctx.arc(0, 0, 3, 0, Math.PI * 2);
+      ctx.fill();
+      break;
+    case "#8e44ad": // tank - Heavy Mech
+      // Metallic body with gradient
+      const tankGrad = ctx.createLinearGradient(
+        -enemy.size,
+        -enemy.size,
+        enemy.size,
+        enemy.size
+      );
+      tankGrad.addColorStop(0, "#a569bd");
+      tankGrad.addColorStop(0.5, "#8e44ad");
+      tankGrad.addColorStop(1, "#6c3483");
+      ctx.fillStyle = tankGrad;
+      ctx.fillRect(-enemy.size, -enemy.size, enemy.size * 2, enemy.size * 2);
+
+      // Armor plating
+      ctx.strokeStyle = "#5b2c87";
+      ctx.lineWidth = 3;
+      ctx.strokeRect(-enemy.size, -enemy.size, enemy.size * 2, enemy.size * 2);
+
+      // Hydraulic pistons
+      ctx.fillStyle = "#34495e";
+      ctx.fillRect(-enemy.size * 0.8, -enemy.size * 0.3, 4, enemy.size * 0.6);
+      ctx.fillRect(
+        enemy.size * 0.8 - 4,
+        -enemy.size * 0.3,
+        4,
+        enemy.size * 0.6
+      );
+
+      // Glowing core
+      ctx.shadowBlur = 12;
+      ctx.fillStyle = "#e74c3c";
+      ctx.beginPath();
+      ctx.arc(0, 0, enemy.size * 0.4, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Warning lights
+      const pulse = Math.sin(Date.now() / 200) * 0.5 + 0.5;
+      ctx.fillStyle = `rgba(255, 71, 87, ${pulse})`;
       for (let i = -1; i <= 1; i += 2) {
         for (let j = -1; j <= 1; j += 2) {
           ctx.beginPath();
@@ -1339,66 +1631,84 @@ function drawEnemy(enemy) {
           ctx.fill();
         }
       }
-      // Bolts
-      ctx.fillStyle = "#b7950b";
-      for (let i = -1; i <= 1; i++) {
-        ctx.beginPath();
-        ctx.arc(i * enemy.size * 0.7, 0, 1.2, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.beginPath();
-        ctx.arc(0, i * enemy.size * 0.7, 1.2, 0, Math.PI * 2);
-        ctx.fill();
-      }
-      // Hatch
-      ctx.strokeStyle = "#fff";
-      ctx.lineWidth = 1.2;
-      ctx.beginPath();
-      ctx.arc(0, 0, enemy.size * 0.5, 0, Math.PI * 2);
-      ctx.stroke();
       break;
-    case "#c0392b": // boss
-      // Large red circle with crown
-      ctx.fillStyle = enemy.color;
+    case "#c0392b": // boss - Demon Lord
+      const bossTime = Date.now() / 150;
+
+      // Pulsing aura
+      ctx.shadowBlur = 20 + 10 * Math.sin(bossTime);
+      ctx.shadowColor = "#ff4757";
+
+      // Main body with dark gradient
+      const bossGrad = ctx.createRadialGradient(0, 0, 0, 0, 0, enemy.size);
+      bossGrad.addColorStop(0, "#2c2c54");
+      bossGrad.addColorStop(0.7, "#c0392b");
+      bossGrad.addColorStop(1, "#7f1d1d");
+      ctx.fillStyle = bossGrad;
       ctx.beginPath();
       ctx.arc(0, 0, enemy.size, 0, Math.PI * 2);
       ctx.fill();
-      ctx.lineWidth = 3;
-      ctx.strokeStyle = "#ffd700";
-      ctx.stroke();
-      // Crown
+
+      // Demonic spikes
+      ctx.fillStyle = "#7f1d1d";
+      for (let i = 0; i < 8; i++) {
+        ctx.save();
+        ctx.rotate((Math.PI * 2 * i) / 8);
+        ctx.beginPath();
+        ctx.moveTo(0, -enemy.size);
+        ctx.lineTo(-3, -enemy.size - 8);
+        ctx.lineTo(3, -enemy.size - 8);
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+      }
+
+      // Glowing crown
+      ctx.shadowBlur = 15;
       ctx.fillStyle = "#ffd700";
       ctx.beginPath();
-      ctx.moveTo(-10, -enemy.size - 2);
-      ctx.lineTo(-5, -enemy.size - 12);
-      ctx.lineTo(0, -enemy.size - 2);
-      ctx.lineTo(5, -enemy.size - 12);
-      ctx.lineTo(10, -enemy.size - 2);
+      ctx.moveTo(-12, -enemy.size - 2);
+      ctx.lineTo(-6, -enemy.size - 15);
+      ctx.lineTo(0, -enemy.size - 5);
+      ctx.lineTo(6, -enemy.size - 15);
+      ctx.lineTo(12, -enemy.size - 2);
       ctx.closePath();
       ctx.fill();
-      // Crown jewels
-      ctx.fillStyle = "#2196F3";
+
+      // Crown gems (animated)
+      const gemPulse = Math.sin(bossTime * 2) * 0.3 + 0.7;
+      ctx.fillStyle = `rgba(33, 150, 243, ${gemPulse})`;
       ctx.beginPath();
-      ctx.arc(-5, -enemy.size - 8, 1.5, 0, Math.PI * 2);
-      ctx.arc(0, -enemy.size - 11, 1.5, 0, Math.PI * 2);
-      ctx.arc(5, -enemy.size - 8, 1.5, 0, Math.PI * 2);
+      ctx.arc(-6, -enemy.size - 10, 2, 0, Math.PI * 2);
+      ctx.arc(0, -enemy.size - 12, 2.5, 0, Math.PI * 2);
+      ctx.arc(6, -enemy.size - 10, 2, 0, Math.PI * 2);
       ctx.fill();
-      // Face
+
+      // Glowing eyes
+      ctx.shadowBlur = 10;
+      ctx.fillStyle = "#ff4757";
+      ctx.beginPath();
+      ctx.arc(-8, -5, 3, 0, Math.PI * 2);
+      ctx.arc(8, -5, 3, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Menacing grin
+      ctx.strokeStyle = "#fff";
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(0, 8, 8, 0.2, Math.PI - 0.2);
+      ctx.stroke();
+
+      // Fangs
       ctx.fillStyle = "#fff";
       ctx.beginPath();
-      ctx.arc(-6, -3, 2.5, 0, Math.PI * 2);
-      ctx.arc(6, -3, 2.5, 0, Math.PI * 2);
+      ctx.moveTo(-4, 8);
+      ctx.lineTo(-2, 12);
+      ctx.lineTo(-6, 10);
+      ctx.moveTo(4, 8);
+      ctx.lineTo(2, 12);
+      ctx.lineTo(6, 10);
       ctx.fill();
-      ctx.fillStyle = "#222";
-      ctx.beginPath();
-      ctx.arc(-6, -3, 1.2, 0, Math.PI * 2);
-      ctx.arc(6, -3, 1.2, 0, Math.PI * 2);
-      ctx.fill();
-      // Mouth
-      ctx.strokeStyle = "#222";
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.arc(0, 6, 6, 0, Math.PI);
-      ctx.stroke();
       break;
     default:
       ctx.fillStyle = enemy.color;
@@ -1408,37 +1718,126 @@ function drawEnemy(enemy) {
       break;
   }
   ctx.restore();
-  // Draw health bar
+  ctx.shadowBlur = 0;
+  ctx.restore();
+
+  // Enhanced health bar
   const healthPercentage = enemy.currentHealth / enemy.maxHealth;
-  const healthBarWidth = enemy.size * 2;
-  const healthBarHeight = 4;
-  ctx.fillStyle = "rgba(0, 0, 0, 0.5)";
+  const healthBarWidth = enemy.size * 2.2;
+  const healthBarHeight = 5;
+  const barY = enemy.y - enemy.size - 12;
+
+  // Health bar background
+  ctx.fillStyle = "rgba(0, 0, 0, 0.7)";
   ctx.fillRect(
-    enemy.x - healthBarWidth / 2,
-    enemy.y - enemy.size - 8,
-    healthBarWidth,
-    healthBarHeight
+    enemy.x - healthBarWidth / 2 - 1,
+    barY - 1,
+    healthBarWidth + 2,
+    healthBarHeight + 2
   );
-  ctx.fillStyle =
-    healthPercentage > 0.5
-      ? "#2ecc71"
-      : healthPercentage > 0.25
-      ? "#f39c12"
-      : "#e74c3c";
+
+  // Health bar fill with gradient
+  const healthGrad = ctx.createLinearGradient(
+    enemy.x - healthBarWidth / 2,
+    0,
+    enemy.x + healthBarWidth / 2,
+    0
+  );
+  if (healthPercentage > 0.6) {
+    healthGrad.addColorStop(0, "#2ecc71");
+    healthGrad.addColorStop(1, "#27ae60");
+  } else if (healthPercentage > 0.3) {
+    healthGrad.addColorStop(0, "#f39c12");
+    healthGrad.addColorStop(1, "#e67e22");
+  } else {
+    healthGrad.addColorStop(0, "#e74c3c");
+    healthGrad.addColorStop(1, "#c0392b");
+  }
+
+  ctx.fillStyle = healthGrad;
   ctx.fillRect(
     enemy.x - healthBarWidth / 2,
-    enemy.y - enemy.size - 8,
+    barY,
     healthBarWidth * healthPercentage,
     healthBarHeight
   );
+
+  // Health bar glow
+  if (healthPercentage < 0.3) {
+    ctx.save();
+    ctx.shadowColor = "#e74c3c";
+    ctx.shadowBlur = 8;
+    ctx.strokeStyle = "#e74c3c";
+    ctx.lineWidth = 1;
+    ctx.strokeRect(
+      enemy.x - healthBarWidth / 2,
+      barY,
+      healthBarWidth * healthPercentage,
+      healthBarHeight
+    );
+    ctx.restore();
+  }
 }
 
-// Draw projectile
+// Draw projectile trails
+function drawProjectileTrails() {
+  for (const trail of projectileTrails) {
+    const alpha = trail.life / trail.maxLife;
+    ctx.save();
+    ctx.globalAlpha = alpha * 0.6;
+    ctx.fillStyle = trail.color;
+    ctx.beginPath();
+    ctx.arc(trail.x, trail.y, trail.size * alpha, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+}
+
+// Draw range indicator
+function drawRangeIndicator(tower) {
+  ctx.save();
+  ctx.globalAlpha = 0.1;
+  ctx.strokeStyle = tower.color;
+  ctx.lineWidth = 2;
+  ctx.setLineDash([5, 5]);
+  ctx.beginPath();
+  ctx.arc(tower.x, tower.y, tower.range, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.restore();
+}
+
+// Draw projectile with enhanced effects
 function drawProjectile(projectile) {
+  // Add trail effect
+  projectileTrails.push({
+    x: projectile.x,
+    y: projectile.y,
+    size: projectile.size * 0.8,
+    color: projectile.color,
+    life: 0.3,
+    maxLife: 0.3,
+  });
+
+  // Draw projectile with glow effect
+  ctx.save();
+
+  // Glow effect
+  ctx.shadowColor = projectile.color;
+  ctx.shadowBlur = 10;
+
   ctx.fillStyle = projectile.color;
   ctx.beginPath();
   ctx.arc(projectile.x, projectile.y, projectile.size, 0, Math.PI * 2);
   ctx.fill();
+
+  // Inner bright core
+  ctx.shadowBlur = 0;
+  ctx.fillStyle = "#ffffff";
+  ctx.beginPath();
+  ctx.arc(projectile.x, projectile.y, projectile.size * 0.4, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.restore();
 }
 
 // Update UI elements
@@ -1494,17 +1893,13 @@ window.addEventListener("DOMContentLoaded", function () {
 
 // Game loop
 function gameLoop(timestamp) {
-  // Calculate delta time
+  if (!gameState.lastFrameTime) gameState.lastFrameTime = timestamp;
   const deltaTime = timestamp - gameState.lastFrameTime;
   gameState.lastFrameTime = timestamp;
-
-  // Update game state
-  update(deltaTime);
-
-  // Draw game
+  if (!window.isPaused) {
+    update(deltaTime);
+  }
   draw();
-
-  // Continue game loop
   requestAnimationFrame(gameLoop);
 }
 
@@ -1522,3 +1917,26 @@ window.renderTowerPreview = function (canvas, towerType) {
   drawTower({ ...towerConfig, x: 0, y: 0, type: towerType }, 0, ctx2);
   ctx2.restore();
 };
+
+// Fix pause/resume and sound: ensure DOM is ready
+window.addEventListener("DOMContentLoaded", function () {
+  // PAUSE/RESUME
+  window.isPaused = false;
+  const pauseBtn = document.getElementById("pauseBtn");
+  if (pauseBtn) {
+    pauseBtn.onclick = function () {
+      window.isPaused = !window.isPaused;
+      pauseBtn.textContent = window.isPaused ? "Resume" : "Pause";
+    };
+  }
+  // SOUND TOGGLE
+  const soundToggle = document.getElementById("soundToggle");
+  if (soundToggle) {
+    soundToggle.onclick = function () {
+      if (window.soundSystem) {
+        const enabled = window.soundSystem.toggle();
+        soundToggle.textContent = `Sound: ${enabled ? "ON" : "OFF"}`;
+      }
+    };
+  }
+});

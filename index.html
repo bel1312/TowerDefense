@@ -64,6 +64,7 @@
           <button id="startWave">Start Wave</button>
           <button id="speedToggle">Speed: x1</button>
           <button id="pauseBtn">Pause</button>
+          <button id="soundToggle">Sound: ON</button>
         </div>
       </div>
       <div id="gameMessage"></div>
@@ -234,11 +235,9 @@
         </div>
       </div>
     </div>
-    <!-- Sound effects -->
-    <audio id="audio-shoot" src="shoot.wav" preload="auto"></audio>
-    <audio id="audio-hit" src="hit.wav" preload="auto"></audio>
-    <audio id="audio-place" src="place.wav" preload="auto"></audio>
-    <audio id="audio-life" src="life.wav" preload="auto"></audio>
+    <!-- Include particle and sound systems -->
+    <script src="particles.js"></script>
+    <script src="sounds.js"></script>
     <script src="game.js"></script>
     <script>
       window.addEventListener("load", function () {
