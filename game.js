@@ -134,21 +134,81 @@ let screenFlash = { active: false, timer: 0 };
 // Add high score to game state
 let highScore = parseInt(localStorage.getItem("td_highscore") || "0", 10);
 
-// 2. Redesign the path with a winding shape
+// Helper: Get selected layout from window.selectedLayout
+function getSelectedLayout() {
+  return window.selectedLayout || "classic";
+}
+// 2. Redesign the path with a winding shape and support multiple layouts
 function createPath() {
-  // New winding path (array of grid cell centers)
-  gameState.path = [
-    { x: 0, y: 5 },
-    { x: 4, y: 5 },
-    { x: 4, y: 2 },
-    { x: 8, y: 2 },
-    { x: 8, y: 8 },
-    { x: 12, y: 8 },
-    { x: 12, y: 4 },
-    { x: 16, y: 4 },
-    { x: 16, y: 10 },
-    { x: 19, y: 10 },
-  ];
+  const layout = getSelectedLayout();
+  if (layout === "classic") {
+    gameState.path = [
+      { x: 0, y: 5 },
+      { x: 4, y: 5 },
+      { x: 4, y: 2 },
+      { x: 8, y: 2 },
+      { x: 8, y: 8 },
+      { x: 12, y: 8 },
+      { x: 12, y: 4 },
+      { x: 16, y: 4 },
+      { x: 16, y: 10 },
+      { x: 19, y: 10 },
+    ];
+  } else if (layout === "zigzag") {
+    gameState.path = [
+      { x: 0, y: 2 },
+      { x: 4, y: 2 },
+      { x: 4, y: 8 },
+      { x: 8, y: 8 },
+      { x: 8, y: 2 },
+      { x: 12, y: 2 },
+      { x: 12, y: 8 },
+      { x: 16, y: 8 },
+      { x: 16, y: 4 },
+      { x: 19, y: 4 },
+    ];
+  } else if (layout === "spiral") {
+    gameState.path = [
+      { x: 0, y: 1 },
+      { x: 18, y: 1 },
+      { x: 18, y: 10 },
+      { x: 1, y: 10 },
+      { x: 1, y: 3 },
+      { x: 16, y: 3 },
+      { x: 16, y: 8 },
+      { x: 3, y: 8 },
+      { x: 3, y: 5 },
+      { x: 14, y: 5 },
+      { x: 14, y: 6 },
+      { x: 5, y: 6 },
+      { x: 5, y: 7 },
+      { x: 13, y: 7 },
+      { x: 13, y: 7 },
+    ];
+  } else if (layout === "sbend") {
+    gameState.path = [
+      { x: 0, y: 2 },
+      { x: 6, y: 2 },
+      { x: 6, y: 8 },
+      { x: 13, y: 8 },
+      { x: 13, y: 2 },
+      { x: 19, y: 2 },
+    ];
+  } else {
+    // fallback
+    gameState.path = [
+      { x: 0, y: 5 },
+      { x: 4, y: 5 },
+      { x: 4, y: 2 },
+      { x: 8, y: 2 },
+      { x: 8, y: 8 },
+      { x: 12, y: 8 },
+      { x: 12, y: 4 },
+      { x: 16, y: 4 },
+      { x: 16, y: 10 },
+      { x: 19, y: 10 },
+    ];
+  }
 }
 
 // 3. Helper: Convert grid cell to pixel center
@@ -992,7 +1052,7 @@ function gameOver(isWin) {
   if (isWin) {
     message += `Victory! You've completed all waves! Final score: ${gameState.score}`;
   } else {
-    message += `Game Over! You've been defeated at wave ${gameState.wave}. Final score: ${gameState.score}`;
+    message += `You've been defeated at wave ${gameState.wave}. Final score: ${gameState.score}`;
   }
   if (window.showGameOverModal) {
     window.showGameOverModal(message);
@@ -1015,8 +1075,8 @@ function resetGame() {
   gameState.enemies = [];
   gameState.projectiles = [];
   gameState.gameOver = false;
-
   // Reset UI
+  createPath();
   updateUI();
   startWaveButton.textContent = "Start Wave";
   towerOptions.forEach((opt) => opt.classList.remove("selected"));
@@ -1412,6 +1472,24 @@ canvas.addEventListener("mousemove", (e) => {
 // Add a resize event to clear the cache if the canvas size changes
 window.addEventListener("resize", () => {
   backgroundCache = null;
+});
+
+// Listen for layout changes and update the path and redraw
+window.addEventListener("DOMContentLoaded", function () {
+  const layoutSelect = document.getElementById("layoutSelect");
+  if (layoutSelect) {
+    layoutSelect.addEventListener("change", function () {
+      createPath();
+      draw();
+    });
+  }
+  const layoutSelectModal = document.getElementById("layoutSelectModal");
+  if (layoutSelectModal) {
+    layoutSelectModal.addEventListener("change", function () {
+      createPath();
+      draw();
+    });
+  }
 });
 
 // Game loop

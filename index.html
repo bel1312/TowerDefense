@@ -63,6 +63,7 @@
         <div class="buttons">
           <button id="startWave">Start Wave</button>
           <button id="speedToggle">Speed: x1</button>
+          <button id="pauseBtn">Pause</button>
         </div>
       </div>
       <div id="gameMessage"></div>
@@ -95,23 +96,149 @@
       >
         <h2 id="gameOverTitle">Game Over!</h2>
         <p id="gameOverText"></p>
-        <button
-          id="restartGameBtn"
+        <div
           style="
-            margin-top: 20px;
-            padding: 10px 24px;
-            font-size: 18px;
-            border: none;
-            border-radius: 6px;
-            background: #e94560;
-            color: #fff;
-            cursor: pointer;
+            margin-top: 10px;
+            display: flex;
+            gap: 12px;
+            justify-content: center;
           "
         >
-          Restart
-        </button>
+          <button
+            id="restartGameBtn"
+            style="
+              padding: 10px 24px;
+              font-size: 18px;
+              border: none;
+              border-radius: 6px;
+              background: #e94560;
+              color: #fff;
+              cursor: pointer;
+            "
+          >
+            Restart
+          </button>
+          <button
+            id="chooseLayoutBtn"
+            style="
+              padding: 10px 24px;
+              font-size: 18px;
+              border: none;
+              border-radius: 6px;
+              background: #2196f3;
+              color: #fff;
+              cursor: pointer;
+            "
+          >
+            Choose Layout
+          </button>
+        </div>
       </div>
     </div>
+    <!-- Add layout selection popup -->
+    <div
+      id="layoutPopup"
+      style="
+        display: flex;
+        position: fixed;
+        left: 0;
+        top: 0;
+        width: 100vw;
+        height: 100vh;
+        background: rgba(0, 0, 0, 0.7);
+        z-index: 2000;
+        justify-content: center;
+        align-items: center;
+      "
+    >
+      <div
+        style="
+          background: #fff;
+          color: #222;
+          padding: 32px 40px;
+          border-radius: 12px;
+          box-shadow: 0 4px 32px #0008;
+          text-align: center;
+          min-width: 300px;
+        "
+      >
+        <h2>Choose a Layout</h2>
+        <div
+          style="
+            margin: 24px 0;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+          "
+        >
+          <button
+            class="layout-btn"
+            data-layout="classic"
+            style="
+              padding: 12px 0;
+              font-size: 18px;
+              border: none;
+              border-radius: 6px;
+              background: #e94560;
+              color: #fff;
+              cursor: pointer;
+            "
+          >
+            Classic
+          </button>
+          <button
+            class="layout-btn"
+            data-layout="zigzag"
+            style="
+              padding: 12px 0;
+              font-size: 18px;
+              border: none;
+              border-radius: 6px;
+              background: #2196f3;
+              color: #fff;
+              cursor: pointer;
+            "
+          >
+            Zigzag
+          </button>
+          <button
+            class="layout-btn"
+            data-layout="spiral"
+            style="
+              padding: 12px 0;
+              font-size: 18px;
+              border: none;
+              border-radius: 6px;
+              background: #ff9800;
+              color: #fff;
+              cursor: pointer;
+            "
+          >
+            Spiral
+          </button>
+          <button
+            class="layout-btn"
+            data-layout="sbend"
+            style="
+              padding: 12px 0;
+              font-size: 18px;
+              border: none;
+              border-radius: 6px;
+              background: #4caf50;
+              color: #fff;
+              cursor: pointer;
+            "
+          >
+            S-Bend
+          </button>
+        </div>
+      </div>
+    </div>
+    <!-- Sound effects -->
+    <audio id="audio-shoot" src="shoot.wav" preload="auto"></audio>
+    <audio id="audio-hit" src="hit.wav" preload="auto"></audio>
+    <audio id="audio-place" src="place.wav" preload="auto"></audio>
+    <audio id="audio-life" src="life.wav" preload="auto"></audio>
     <script src="game.js"></script>
     <script>
       window.addEventListener("load", function () {
@@ -126,14 +253,37 @@
             ctx.fillRect(0, 0, canvas.width, canvas.height);
           }
         });
+        // Remove layout select logic
+        // Layout popup logic
+        window.selectedLayout = "classic";
+        function showLayoutPopup() {
+          document.getElementById("layoutPopup").style.display = "flex";
+        }
+        function hideLayoutPopup() {
+          document.getElementById("layoutPopup").style.display = "none";
+        }
+        document.querySelectorAll(".layout-btn").forEach(function (btn) {
+          btn.onclick = function () {
+            window.selectedLayout = btn.getAttribute("data-layout");
+            hideLayoutPopup();
+            if (window.resetGame) window.resetGame();
+          };
+        });
+        // Show popup at start
+        showLayoutPopup();
         // Game over modal logic
         window.showGameOverModal = function (message) {
           document.getElementById("gameOverText").textContent = message;
           document.getElementById("gameOverModal").style.display = "flex";
+          // Removed automatic layout popup
         };
         document.getElementById("restartGameBtn").onclick = function () {
           document.getElementById("gameOverModal").style.display = "none";
           if (window.resetGame) window.resetGame();
+        };
+        document.getElementById("chooseLayoutBtn").onclick = function () {
+          document.getElementById("gameOverModal").style.display = "none";
+          showLayoutPopup();
         };
       });
     </script>
